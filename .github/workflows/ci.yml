@@ -16,11 +16,12 @@ jobs:
         uses: actions/setup-java@v4
         with:
           java-version: '21'
-          distribution: 'temurin'
-      - name: Run Vector Clock Tests
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v3
+      - name: Run All Orchestrator Test Suites
         run: |
           cd orchestrator
-          ./gradlew test --tests "com.timemachine.clock.VectorClockTest" --info
+          gradle test --info
 
   test-go-capture-agent:
     name: Go Capture Agent Tests
