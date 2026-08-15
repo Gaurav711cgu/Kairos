@@ -108,11 +108,19 @@ func (w *SnapshotWriter) write(ctx context.Context, snap RawSnapshot) error {
     
     // 3. POST metadata to orchestrator snapshot store
     metadata := map[string]any{
-        "snapshot_id":   snap.SnapshotID,
-        "service_id":    snap.ServiceID,
-        "trace_id":      snap.TraceID,
-        "vector_clock":  snap.VectorClock,
-        "schema_version": 1,
+        "snapshot_id":      snap.SnapshotID,
+        "service_id":       snap.ServiceID,
+        "trace_id":         snap.TraceID,
+        "vector_clock":     snap.VectorClock,
+        "method":           snap.Method,
+        "path":             snap.Path,
+        "request_headers":  snap.RequestHeaders,
+        "request_body":     string(snap.RequestBody),
+        "response_status":  snap.ResponseStatus,
+        "response_headers": snap.ResponseHeaders,
+        "response_body":    string(snap.ResponseBody),
+        "latency_ms":       snap.LatencyMs,
+        "schema_version":   1,
     }
     metaJSON, _ := json.Marshal(metadata)
     

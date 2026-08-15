@@ -1,6 +1,7 @@
 package com.timemachine.replay;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
+import com.github.tomakehurst.wiremock.client.WireMock;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import com.timemachine.store.Snapshot;
 import org.slf4j.Logger;
@@ -20,9 +21,33 @@ public class MockLayerInjector {
             server.start();
             int port = server.port();
             log.info("[{}] Started WireMock server on port {}", sessionId, port);
+
+            // Register real stubs from recorded downstream snapshots
+            if (snapshots != null) {
+                int stubsCount = 0;
+                for (Snapshot s : snapshots) {
+                    if (s.path() != null && !s.path().isBlank() && s.method() != null) {
+                        String body = s.responseBody() != null ? s.responseBody() : "{\"status\":\"OK\"}";
+                        int status = s.responseStatus() > 0 ? s.responseStatus() : 200;
+
+                        server.stubFor(
+                            WireMock.request(s.method(), WireMock.urlEqualTo(s.path()))
+                                .willReturn(WireMock.aResponse()
+                                    .withStatus(status)
+                                    .withHeader("Content-Type", "application/json")
+                                    .withHeader("X-Vector-Clock", s.vectorClock() != null ? s.vectorClock().toHeader() : "")
+                                    .withBody(body)
+                                )
+                        );
+                        stubsCount++;
+                    }
+                }
+                log.info("[{}] Injected {} recorded snapshot stubs into WireMock", sessionId, stubsCount);
+            }
+
             return new WireMockContext(server, port);
         } catch (Exception e) {
-            log.warn("[{}] Could not start local WireMock (running without external mock proxy): {}", sessionId, e.getMessage());
+            log.warn("[{}] Could not start local WireMock (running with downstream direct routing): {}", sessionId, e.getMessage());
             return new WireMockContext(null, 0);
         }
     }

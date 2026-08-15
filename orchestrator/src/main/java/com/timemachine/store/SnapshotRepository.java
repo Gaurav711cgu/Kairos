@@ -26,6 +26,12 @@ public class SnapshotRepository {
         rs.getString("trace_id"),
         VectorClock.fromJson(rs.getString("vector_clock")),
         rs.getString("storage_key"),
+        rs.getString("method"),
+        rs.getString("path"),
+        rs.getString("request_body"),
+        rs.getInt("response_status"),
+        rs.getString("response_body"),
+        rs.getLong("latency_ms"),
         rs.getInt("schema_version"),
         rs.getLong("sequence_num"),
         rs.getTimestamp("captured_at") != null ? rs.getTimestamp("captured_at").toInstant() : Instant.now()
@@ -33,9 +39,19 @@ public class SnapshotRepository {
 
     public void ingestSnapshot(SnapshotDTO dto) {
         String sql = """
-            INSERT INTO snapshots (snapshot_id, service_id, trace_id, vector_clock, storage_key, schema_version, captured_at)
-            VALUES (?, ?, ?, ?::jsonb, ?, ?, ?)
-            ON CONFLICT (snapshot_id) DO NOTHING
+            INSERT INTO snapshots (
+                snapshot_id, service_id, trace_id, vector_clock, storage_key,
+                method, path, request_body, response_status, response_body, latency_ms,
+                schema_version, captured_at
+            )
+            VALUES (?, ?, ?, ?::jsonb, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (snapshot_id) DO UPDATE SET
+                method = EXCLUDED.method,
+                path = EXCLUDED.path,
+                request_body = EXCLUDED.request_body,
+                response_status = EXCLUDED.response_status,
+                response_body = EXCLUDED.response_body,
+                latency_ms = EXCLUDED.latency_ms
         """;
         
         Timestamp capturedAt = dto.capturedAt() != null ? Timestamp.from(dto.capturedAt()) : Timestamp.from(Instant.now());
@@ -48,6 +64,12 @@ public class SnapshotRepository {
             dto.traceId(),
             vcJson,
             dto.storageKey(),
+            dto.method() != null ? dto.method() : "POST",
+            dto.path() != null ? dto.path() : "/orders",
+            dto.requestBody(),
+            dto.responseStatus() != null ? dto.responseStatus() : 200,
+            dto.responseBody(),
+            dto.latencyMs() != null ? dto.latencyMs() : 0L,
             dto.schemaVersion() > 0 ? dto.schemaVersion() : 1,
             capturedAt
         );
@@ -55,7 +77,9 @@ public class SnapshotRepository {
 
     public List<Snapshot> findBySessionCausalOrder(String sessionId) {
         String sql = """
-            SELECT s.id, s.snapshot_id, s.service_id, s.trace_id, s.vector_clock, s.storage_key, s.schema_version, s.sequence_num, s.captured_at
+            SELECT s.id, s.snapshot_id, s.service_id, s.trace_id, s.vector_clock, s.storage_key,
+                   s.method, s.path, s.request_body, s.response_status, s.response_body, s.latency_ms,
+                   s.schema_version, s.sequence_num, s.captured_at
             FROM snapshot_causal_order o
             JOIN snapshots s ON o.snapshot_id = s.snapshot_id
             WHERE o.session_id = ?
@@ -66,7 +90,9 @@ public class SnapshotRepository {
 
     public List<Snapshot> findNewSinceSequence(long lastSeq) {
         String sql = """
-            SELECT id, snapshot_id, service_id, trace_id, vector_clock, storage_key, schema_version, sequence_num, captured_at
+            SELECT id, snapshot_id, service_id, trace_id, vector_clock, storage_key,
+                   method, path, request_body, response_status, response_body, latency_ms,
+                   schema_version, sequence_num, captured_at
             FROM snapshots
             WHERE sequence_num > ?
             ORDER BY sequence_num ASC
@@ -108,11 +134,25 @@ public class SnapshotRepository {
 
     public List<Snapshot> findByTraceId(String traceId) {
         String sql = """
-            SELECT id, snapshot_id, service_id, trace_id, vector_clock, storage_key, schema_version, sequence_num, captured_at
+            SELECT id, snapshot_id, service_id, trace_id, vector_clock, storage_key,
+                   method, path, request_body, response_status, response_body, latency_ms,
+                   schema_version, sequence_num, captured_at
             FROM snapshots
             WHERE trace_id = ?
             ORDER BY sequence_num ASC
         """;
         return jdbcTemplate.query(sql, snapshotRowMapper, traceId);
+    }
+
+    public List<Snapshot> findAllRecent(int limit) {
+        String sql = """
+            SELECT id, snapshot_id, service_id, trace_id, vector_clock, storage_key,
+                   method, path, request_body, response_status, response_body, latency_ms,
+                   schema_version, sequence_num, captured_at
+            FROM snapshots
+            ORDER BY sequence_num DESC
+            LIMIT ?
+        """;
+        return jdbcTemplate.query(sql, snapshotRowMapper, limit);
     }
 }

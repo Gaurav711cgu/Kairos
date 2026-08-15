@@ -29,6 +29,9 @@ public class ReplayOrchestrator {
     private final RestTemplate restTemplate = new RestTemplate();
     private final Semaphore replaySlots = new Semaphore(2);
 
+    @Value("${replay.target-url:${REPLAY_TARGET_URL:http://localhost:8080}}")
+    private String replayTargetUrl;
+
     @Value("${llmAnalyzer.url:http://localhost:8092}")
     private String llmAnalyzerUrl;
 
@@ -67,6 +70,9 @@ public class ReplayOrchestrator {
             if (snapshots.isEmpty() && traceId != null && !traceId.isBlank()) {
                 snapshots = snapshotRepository.findByTraceId(traceId);
             }
+            if (snapshots.isEmpty()) {
+                snapshots = snapshotRepository.findAllRecent(10);
+            }
             mockCtx = mockLayerInjector.inject(snapshots, sessionId);
 
             // Step 4: Verify acyclicity & replay events
@@ -77,7 +83,7 @@ public class ReplayOrchestrator {
                 return;
             }
 
-            ReplayTrace trace = httpReplayer.replay(snapshots, "http://localhost:8080", dbEnv.jdbcUrl(), sessionId);
+            ReplayTrace trace = httpReplayer.replay(snapshots, replayTargetUrl, dbEnv.jdbcUrl(), sessionId);
 
             // Step 5: Collect trace
             sessionRepository.updateStatus(sessionId, ReplayStatus.COLLECTING_TRACE, null);
@@ -96,8 +102,8 @@ public class ReplayOrchestrator {
                 "dbDiffs", List.of(
                     Map.of(
                         "tableName", "inventory",
-                        "before", Map.of("product_id", "PRODUCT_X", "stock", 1),
-                        "after", Map.of("product_id", "PRODUCT_X", "stock", trace.racingConditionDetected() ? -1 : 0),
+                        "before", trace.dbStateBefore().getOrDefault("inventory", Map.of("PRODUCT_X", Map.of("stock", 1))),
+                        "after", trace.dbStateAfter().getOrDefault("inventory", Map.of("PRODUCT_X", Map.of("stock", trace.racingConditionDetected() ? -1 : 0))),
                         "changed", true
                     )
                 )

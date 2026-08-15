@@ -11,6 +11,12 @@ public record Snapshot(
     String traceId,
     VectorClock vectorClock,
     String storageKey,
+    String method,
+    String path,
+    String requestBody,
+    int responseStatus,
+    String responseBody,
+    long latencyMs,
     int schemaVersion,
     long sequenceNum,
     Instant capturedAt

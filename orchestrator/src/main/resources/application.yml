@@ -33,6 +33,7 @@ management:
 
 replay:
   mode: ${REPLAY_MODE:TESTCONTAINERS}
+  target-url: ${REPLAY_TARGET_URL:http://localhost:8080}
   max-concurrent-sessions: 2
   session-timeout-minutes: 30
 
