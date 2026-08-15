@@ -1,0 +1,239 @@
+version: '3.9'
+
+networks:
+  timemachine:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  postgres_data:
+  prometheus_data:
+  grafana_data:
+
+services:
+  # ──────────────────────────────────────────────
+  # Infrastructure
+  # ──────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: demo
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./seed.sql:/docker-entrypoint-initdb.d/seed.sql:ro
+    ports:
+      - "5432:5432"
+    networks:
+      - timemachine
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d demo"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ──────────────────────────────────────────────
+  # Demo Microservices (have the race condition bug)
+  # ──────────────────────────────────────────────
+  order-service-internal:
+    build:
+      context: ./demo-system/order-service
+      dockerfile: Dockerfile
+    environment:
+      PORT: "8081"
+      INVENTORY_URL: http://inventory-service:8082
+      PAYMENT_URL: http://payment-service:8083
+      SERVICES_INVENTORY_URL: http://inventory-service:8082
+      SERVICES_PAYMENT_URL: http://payment-service:8083
+    networks:
+      - timemachine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/orders/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  payment-service:
+    build:
+      context: ./demo-system/payment-service
+      dockerfile: Dockerfile
+    environment:
+      PORT: "8083"
+    networks:
+      - timemachine
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8083/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  inventory-service:
+    build:
+      context: ./demo-system/inventory-service
+      dockerfile: Dockerfile
+    environment:
+      PORT: "8082"
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/demo
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+    networks:
+      - timemachine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8082/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ──────────────────────────────────────────────
+  # Capture Agent — Go reverse proxy (wraps order-service)
+  # Public port :8080 → agent → order-service-internal :8081
+  # ──────────────────────────────────────────────
+  capture-agent:
+    build:
+      context: ./capture-agent
+      dockerfile: Dockerfile
+    environment:
+      UPSTREAM_HOST: order-service-internal:8081
+      LISTEN_ADDR: ":8080"
+      SERVICE_ID: order-service
+      SNAPSHOT_STORE_URL: http://orchestrator:8090
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_ACCESS_KEY: ${SUPABASE_ACCESS_KEY:-}
+      SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}
+      SUPABASE_BUCKET: snapshots
+    ports:
+      - "8080:8080"
+    networks:
+      - timemachine
+    depends_on:
+      order-service-internal:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/orders/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ──────────────────────────────────────────────
+  # Time Machine Core
+  # ──────────────────────────────────────────────
+  orchestrator:
+    build:
+      context: ./orchestrator
+      dockerfile: Dockerfile
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/demo
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+      REPLAY_MODE: TESTCONTAINERS
+      ANOMALY_DETECTOR_URL: http://anomaly-detector:8091
+      LLM_ANALYZER_URL: http://llm-analyzer:8092
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_ACCESS_KEY: ${SUPABASE_ACCESS_KEY:-}
+      SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}
+      SUPABASE_BUCKET: snapshots
+      SERVER_PORT: "8090"
+    ports:
+      - "8090:8090"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock  # Testcontainers needs Docker socket
+    networks:
+      - timemachine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8090/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  anomaly-detector:
+    build:
+      context: ./anomaly-detector
+      dockerfile: Dockerfile
+    environment:
+      PORT: "8091"
+    ports:
+      - "8091:8091"
+    networks:
+      - timemachine
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8091/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  llm-analyzer:
+    build:
+      context: ./llm-analyzer
+      dockerfile: Dockerfile
+    environment:
+      PORT: "8092"
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    ports:
+      - "8092:8092"
+    networks:
+      - timemachine
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8092/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ──────────────────────────────────────────────
+  # Frontend Dashboard
+  # ──────────────────────────────────────────────
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    environment:
+      NEXT_PUBLIC_ORCHESTRATOR_URL: http://localhost:8090
+      ORCHESTRATOR_URL: http://orchestrator:8090
+    ports:
+      - "3000:3000"
+    networks:
+      - timemachine
+    depends_on:
+      - orchestrator
+
+  # ──────────────────────────────────────────────
+  # Monitoring
+  # ──────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=7d'
+    ports:
+      - "9090:9090"
+    networks:
+      - timemachine
+
+  grafana:
+    image: grafana/grafana:10.2.0
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3001:3000"
+    networks:
+      - timemachine
+    depends_on:
+      - prometheus

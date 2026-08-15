@@ -1,0 +1,77 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.2.5'
+    id 'io.spring.dependency-management' version '1.1.4'
+    id 'org.graalvm.buildtools.native' version '0.9.28'
+    id 'me.champeau.jmh' version '0.7.2'
+}
+
+group = 'com.timemachine'
+version = '0.0.1-SNAPSHOT'
+java { sourceCompatibility = JavaVersion.VERSION_21 }
+
+repositories { mavenCentral() }
+
+dependencies {
+    // Spring Boot
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    
+    // jOOQ for type-safe SQL
+    implementation 'org.springframework.boot:spring-boot-starter-jooq'
+    
+    // PostgreSQL
+    runtimeOnly 'org.postgresql:postgresql'
+    
+    // AWS SDK v2 for S3-compatible Supabase Storage
+    implementation platform('software.amazon.awssdk:bom:2.24.0')
+    implementation 'software.amazon.awssdk:s3'
+    implementation 'software.amazon.awssdk:url-connection-client'
+    
+    // Resilience4j circuit breaker
+    implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.2.0'
+    implementation 'io.github.resilience4j:resilience4j-reactor:2.2.0'
+    
+    // zstd compression
+    implementation 'com.github.luben:zstd-jni:1.5.5-11'
+    
+    // Jackson for JSON
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+    
+    // WireMock for mock layer injection in replay
+    implementation 'com.github.tomakehurst:wiremock-standalone:3.3.1'
+    
+    // Testcontainers for local replay isolation
+    implementation 'org.testcontainers:postgresql:1.19.7'
+    
+    // HTTP client for replay
+    implementation 'org.springframework.boot:spring-boot-starter-webflux'
+    
+    // Prometheus metrics
+    implementation 'io.micrometer:micrometer-registry-prometheus'
+    
+    // Lombok (reduces boilerplate)
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+    
+    // Test
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.testcontainers:junit-jupiter:1.19.7'
+    testImplementation 'org.testcontainers:postgresql:1.19.7'
+    
+    // JMH for benchmarks
+    jmh 'org.openjdk.jmh:jmh-core:1.37'
+    jmh 'org.openjdk.jmh:jmh-generator-annprocess:1.37'
+}
+
+test { useJUnitPlatform() }
+
+jmh {
+    iterations = 10
+    warmupIterations = 5
+    fork = 1
+    benchmarkMode = ['thrpt']
+    timeUnit = 'ms'
+}

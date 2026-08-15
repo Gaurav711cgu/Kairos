@@ -1,0 +1,11 @@
+# Cloud profile (HF Spaces deployment)
+# Activate with: SPRING_PROFILES_ACTIVE=cloud
+
+replay:
+  mode: NEON_BRANCH
+
+spring:
+  datasource:
+    url: ${NEON_DATABASE_URL}
+  hikari:
+    maximum-pool-size: 5

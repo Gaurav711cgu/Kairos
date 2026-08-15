@@ -1,0 +1,62 @@
+server:
+  port: ${SERVER_PORT:8090}
+  compression:
+    enabled: true
+    mime-types: application/json
+    min-response-size: 1024
+
+spring:
+  application:
+    name: orchestrator
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/demo}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+  threads:
+    virtual:
+      enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+replay:
+  mode: ${REPLAY_MODE:TESTCONTAINERS}
+  max-concurrent-sessions: 2
+  session-timeout-minutes: 30
+
+neon:
+  api-key: ${NEON_API_KEY:}
+  project-id: ${NEON_PROJECT_ID:}
+
+storage:
+  endpoint: ${SUPABASE_URL:}/storage/v1/s3
+  bucket: ${SUPABASE_BUCKET:snapshots}
+  access-key: ${SUPABASE_ACCESS_KEY:}
+  secret-key: ${SUPABASE_SECRET_KEY:}
+  region: ap-south-1
+
+anomalyDetector:
+  url: ${ANOMALY_DETECTOR_URL:http://localhost:8091}
+
+llmAnalyzer:
+  url: ${LLM_ANALYZER_URL:http://localhost:8092}
+  timeout-seconds: 15
+
+logging:
+  pattern:
+    console: '%d{HH:mm:ss.SSS} [%thread] %-5level [%logger{20}] %msg%n'
+  level:
+    root: INFO
+    com.timemachine: DEBUG

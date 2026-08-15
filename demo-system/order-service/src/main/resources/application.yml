@@ -1,0 +1,17 @@
+server:
+  port: ${PORT:8080}
+
+spring:
+  application:
+    name: order-service
+
+services:
+  inventory-url: ${INVENTORY_URL:http://localhost:8082}
+  payment-url: ${PAYMENT_URL:http://localhost:8083}
+
+logging:
+  pattern:
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level [%logger{15}] %msg%n"
+  level:
+    root: INFO
+    com.demo: DEBUG

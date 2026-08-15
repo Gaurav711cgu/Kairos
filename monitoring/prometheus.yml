@@ -1,0 +1,28 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'capture-agent'
+    static_configs:
+      - targets: ['capture-agent:2112']
+    metrics_path: /metrics
+
+  - job_name: 'orchestrator'
+    static_configs:
+      - targets: ['orchestrator:8090']
+    metrics_path: /actuator/prometheus
+
+  - job_name: 'anomaly-detector'
+    static_configs:
+      - targets: ['anomaly-detector:8091']
+    metrics_path: /metrics
+
+  - job_name: 'llm-analyzer'
+    static_configs:
+      - targets: ['llm-analyzer:8092']
+    metrics_path: /metrics
+
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres:5432']

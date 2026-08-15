@@ -1,0 +1,13 @@
+.env
+*.class
+build/
+.gradle/
+__pycache__/
+*.pyc
+node_modules/
+.next/
+dist/
+*.log
+target/
+.DS_Store
+.pytest_cache/
