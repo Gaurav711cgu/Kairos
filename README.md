@@ -79,19 +79,19 @@ Distributed microservice architectures suffer from non-deterministic failures: r
 
 ### Ingestion Path (Write)
 1. Inbound request arrives at the Go `capture-agent` (:8080).
-2. The agent ticks its local `ThreadSafeVectorClock` (`sync.RWMutex`, ~100ns) and attaches `X-Vector-Clock` and `X-Trace-Id` headers to the forwarded request.
+2. The agent ticks its local `ThreadSafeVectorClock` and `HybridLogicalClock` (HLC) with lock-free atomic counters, attaching `X-Vector-Clock`, `X-HLC`, `X-Captured-Timestamp`, and `X-Replay-Seed` headers.
 3. The response is recorded via `ResponseRecorder`.
-4. A `RawSnapshot` is emitted to a non-blocking bounded channel (`capacity: 100`).
+4. A `RawSnapshot` is stored in an in-memory `CircularRingBuffer` (allocation-free O(1)) and enqueued to a bounded channel (`capacity: 100`) for commit-on-anomaly or background persistence.
 5. A background goroutine drains the channel with a 5-permit weighted semaphore, applies `zstd` level-3 compression, and commits metadata to the Orchestrator store.
 
 ### Replay Path (Read & Execution)
 1. Orchestrator registers a new `ReplaySession` in PostgreSQL.
 2. An 8-step Saga begins asynchronously on a Java 21 Virtual Thread.
-3. Database sandbox is initialized (Testcontainers local / Neon CoW branch cloud).
-4. WireMock is configured with recorded downstream responses in `STRICT` mode.
+3. Database sandbox is initialized (Testcontainers local / Neon CoW branch cloud) with dedicated platform thread pools to eliminate carrier thread pinning.
+4. WireMock is configured in **Fail-Closed mode** (`priority: 100 -> 503 Service Unavailable`) to prevent unmocked outbound traffic leakage.
 5. DFS cycle detection algorithm validates the happens-before graph acyclicity.
-6. Concurrent events are executed simultaneously via virtual threads while respecting prerequisite happens-before relationships.
-7. Database state diff is collected and passed alongside the trace to Gemini 2.5 Flash for automated RCA generation.
+6. Concurrent events are executed simultaneously via Java 21 Virtual Threads while respecting prerequisite happens-before relationships.
+7. Database state diff is collected via direct JDBC query before/after replay and passed alongside the trace to Gemini 2.5 Flash for automated RCA generation.
 
 ---
 

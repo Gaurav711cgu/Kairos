@@ -2,6 +2,7 @@ package main
 
 import (
     "bytes"
+    "context"
     "io"
     "log/slog"
     "net/http"
@@ -13,12 +14,13 @@ import (
 )
 
 type Agent struct {
-    cfg     Config
-    proxy   *httputil.ReverseProxy
-    clock   *ThreadSafeVectorClock
-    snapCh  chan RawSnapshot
-    metrics *AgentMetrics
-    writer  *SnapshotWriter
+    cfg        Config
+    proxy      *httputil.ReverseProxy
+    clock      *ThreadSafeVectorClock
+    snapCh     chan RawSnapshot
+    ringBuffer *CircularRingBuffer
+    metrics    *AgentMetrics
+    writer     *SnapshotWriter
 }
 
 func NewAgent(cfg Config) *Agent {
@@ -33,29 +35,32 @@ func NewAgent(cfg Config) *Agent {
     
     metrics := NewAgentMetrics()
     snapCh := make(chan RawSnapshot, cfg.ChannelSize)
+    ringBuffer := NewCircularRingBuffer(1000)
     writer := NewSnapshotWriter(cfg, snapCh, metrics)
     
     return &Agent{
-        cfg:    cfg,
-        proxy:  proxy,
-        clock:  NewVectorClock(cfg.ServiceID),
-        snapCh: snapCh,
-        metrics: metrics,
-        writer: writer,
+        cfg:        cfg,
+        proxy:      proxy,
+        clock:      NewVectorClock(cfg.ServiceID),
+        snapCh:     snapCh,
+        ringBuffer: ringBuffer,
+        metrics:    metrics,
+        writer:     writer,
     }
 }
 
 func (a *Agent) ServeHTTP(w http.ResponseWriter, r *http.Request) {
     start := time.Now()
     
-    // 1. Ensure trace ID
+    // 1. Ensure deterministic trace ID
     traceID := r.Header.Get("X-Trace-Id")
     if traceID == "" {
         traceID = uuid.New().String()
     }
     
-    // 2. Tick vector clock (sync.RWMutex, ~100ns)
+    // 2. Tick bounded vector clock & HLC
     vcSnapshot := a.clock.Tick(a.cfg.ServiceID)
+    capturedTimestamp := start.UTC().Format(time.RFC3339Nano)
     
     // 3. Capture request body for snapshot
     var reqBody []byte
@@ -64,12 +69,15 @@ func (a *Agent) ServeHTTP(w http.ResponseWriter, r *http.Request) {
         r.Body = io.NopCloser(bytes.NewReader(reqBody))
     }
     
-    // 4. Attach headers to outgoing request
+    // 4. Attach deterministic entropy & causal headers to outgoing request
     outReq := r.Clone(r.Context())
     outReq.URL.Host = a.cfg.UpstreamHost
     outReq.URL.Scheme = "http"
     outReq.Header.Set("X-Vector-Clock", vcSnapshot.ToHeader())
+    outReq.Header.Set("X-HLC", vcSnapshot.HLC().String())
     outReq.Header.Set("X-Trace-Id", traceID)
+    outReq.Header.Set("X-Captured-Timestamp", capturedTimestamp)
+    outReq.Header.Set("X-Replay-Seed", traceID)
     outReq.Host = a.cfg.UpstreamHost
     
     // 5. Capture response
@@ -83,7 +91,7 @@ func (a *Agent) ServeHTTP(w http.ResponseWriter, r *http.Request) {
         a.clock.Merge(respVC)
     }
     
-    // 7. NON-BLOCKING snapshot enqueue (~50ns)
+    // 7. Store in circular in-memory ring buffer (allocation-free O(1))
     snap := RawSnapshot{
         SnapshotID:      uuid.New().String(),
         ServiceID:       a.cfg.ServiceID,
@@ -99,13 +107,15 @@ func (a *Agent) ServeHTTP(w http.ResponseWriter, r *http.Request) {
         LatencyMs:       latency.Milliseconds(),
         CapturedAt:      time.Now().UTC(),
     }
+    a.ringBuffer.Push(snap)
     
+    // 8. NON-BLOCKING snapshot enqueue with load-shedding
     select {
-    case a.snapCh <- snap:  // Fast path — never blocks caller
+    case a.snapCh <- snap:
         a.metrics.SnapshotQueued.Inc()
     default:
-        a.metrics.SnapshotDropped.Inc()  // Load shed — never block!
-        slog.Warn("snapshot channel full — load shedding",
+        a.metrics.SnapshotDropped.Inc()
+        slog.Warn("snapshot channel full - load shedding",
             "channelSize", cap(a.snapCh), "dropped", a.metrics.DroppedTotal())
     }
     

@@ -22,7 +22,18 @@ public class MockLayerInjector {
             int port = server.port();
             log.info("[{}] Started WireMock server on port {}", sessionId, port);
 
-            // Register real stubs from recorded downstream snapshots
+            // 1. Fail-Closed Sandbox Security: Block all unmocked egress traffic
+            server.stubFor(
+                WireMock.any(WireMock.anyUrl())
+                    .atPriority(100) // Lowest priority fallback
+                    .willReturn(WireMock.aResponse()
+                        .withStatus(503)
+                        .withHeader("Content-Type", "application/json")
+                        .withBody("{\"error\":\"EGRESS_BLOCKED_UNMOCKED_REPLAY_CALL\",\"session\":\"" + sessionId + "\"}")
+                    )
+            );
+
+            // 2. Register real stubs from recorded downstream snapshots (higher priority)
             if (snapshots != null) {
                 int stubsCount = 0;
                 for (Snapshot s : snapshots) {
@@ -32,6 +43,7 @@ public class MockLayerInjector {
 
                         server.stubFor(
                             WireMock.request(s.method(), WireMock.urlEqualTo(s.path()))
+                                .atPriority(1) // High priority match
                                 .willReturn(WireMock.aResponse()
                                     .withStatus(status)
                                     .withHeader("Content-Type", "application/json")
@@ -42,7 +54,7 @@ public class MockLayerInjector {
                         stubsCount++;
                     }
                 }
-                log.info("[{}] Injected {} recorded snapshot stubs into WireMock", sessionId, stubsCount);
+                log.info("[{}] Injected {} recorded snapshot stubs into WireMock (Fail-Closed mode active)", sessionId, stubsCount);
             }
 
             return new WireMockContext(server, port);

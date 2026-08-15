@@ -32,7 +32,16 @@ public class HttpReplayer {
     @Value("${spring.datasource.password:postgres}")
     private String dbPass;
 
+    // Virtual threads for non-blocking HTTP socket dispatching
     private final ExecutorService virtualExecutor = Executors.newVirtualThreadPerTaskExecutor();
+
+    // Dedicated platform thread pool for JDBC queries to avoid carrier thread pinning
+    private final ExecutorService databaseIoPool = Executors.newFixedThreadPool(16, r -> {
+        Thread t = new Thread(r, "kairos-db-io");
+        t.setDaemon(true);
+        return t;
+    });
+
     private final HttpClient httpClient = HttpClient.newBuilder()
             .executor(virtualExecutor)
             .connectTimeout(Duration.ofSeconds(5))
