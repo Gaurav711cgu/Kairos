@@ -33,6 +33,10 @@ public class DbRestorer {
     private final NeonBranchManager neonBranchManager;
     private final JdbcTemplate jdbcTemplate;
 
+    public ReplayMode getActiveMode() {
+        return mode != null ? mode : ReplayMode.PRIMARY_RESET;
+    }
+
     public ReplayEnvironment restore(String snapshotId, String sessionId) {
         log.info("[{}] Restoring isolated database sandbox in mode: {}", sessionId, mode);
 
@@ -47,54 +51,60 @@ public class DbRestorer {
         }
 
         // 2. Local Testcontainers Dynamic Sandbox Mode
-        try {
-            log.info("[{}] Attempting to launch dynamic Testcontainers PostgreSQL container...", sessionId);
-            PostgreSQLContainer<?> container = new PostgreSQLContainer<>("postgres:15-alpine")
-                    .withDatabaseName("replay_" + sessionId.replace("-", "_"))
-                    .withUsername("postgres")
-                    .withPassword("postgres");
+        if (mode == ReplayMode.TESTCONTAINERS) {
+            try {
+                log.info("[{}] Attempting to launch dynamic Testcontainers PostgreSQL container...", sessionId);
+                PostgreSQLContainer<?> container = new PostgreSQLContainer<>("postgres:15-alpine")
+                        .withDatabaseName("replay_" + sessionId.replace("-", "_"))
+                        .withUsername("postgres")
+                        .withPassword("postgres");
 
-            container.start();
-            String containerJdbcUrl = container.getJdbcUrl();
-            log.info("[{}] Testcontainers Postgres started at: {}", sessionId, containerJdbcUrl);
+                container.start();
+                String containerJdbcUrl = container.getJdbcUrl();
+                log.info("[{}] Testcontainers Postgres started at: {}", sessionId, containerJdbcUrl);
 
-            // Initialize seed tables in the new container
-            try (Connection conn = DriverManager.getConnection(containerJdbcUrl, container.getUsername(), container.getPassword());
-                 Statement stmt = conn.createStatement()) {
-                stmt.execute("""
-                    CREATE TABLE IF NOT EXISTS inventory (
-                        product_id   VARCHAR(50) PRIMARY KEY,
-                        name         VARCHAR(255) NOT NULL,
-                        stock        INTEGER NOT NULL DEFAULT 0
-                    );
-                    CREATE TABLE IF NOT EXISTS orders (
-                        order_id    VARCHAR(50) PRIMARY KEY,
-                        user_id     VARCHAR(50) NOT NULL,
-                        product_id  VARCHAR(50) NOT NULL,
-                        status      VARCHAR(50) NOT NULL DEFAULT 'CREATED',
-                        created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-                    );
-                    INSERT INTO inventory (product_id, name, stock)
-                    VALUES ('PRODUCT_X', 'Limited Edition Widget', 1)
-                    ON CONFLICT (product_id) DO UPDATE SET stock = 1;
-                """);
-            }
-
-            return new ReplayEnvironment(containerJdbcUrl, () -> {
-                try {
-                    container.stop();
-                    log.info("[{}] Stopped Testcontainers Postgres container", sessionId);
-                } catch (Exception e) {
-                    log.warn("Error stopping Testcontainers: {}", e.getMessage());
+                // Initialize seed tables in the new container
+                try (Connection conn = DriverManager.getConnection(containerJdbcUrl, container.getUsername(), container.getPassword());
+                     Statement stmt = conn.createStatement()) {
+                    stmt.execute("""
+                        CREATE TABLE IF NOT EXISTS inventory (
+                            product_id   VARCHAR(50) PRIMARY KEY,
+                            name         VARCHAR(255) NOT NULL,
+                            stock        INTEGER NOT NULL DEFAULT 0
+                        );
+                        CREATE TABLE IF NOT EXISTS orders (
+                            order_id    VARCHAR(50) PRIMARY KEY,
+                            user_id     VARCHAR(50) NOT NULL,
+                            product_id  VARCHAR(50) NOT NULL,
+                            status      VARCHAR(50) NOT NULL DEFAULT 'CREATED',
+                            created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                        );
+                        INSERT INTO inventory (product_id, name, stock)
+                        VALUES ('PRODUCT_X', 'Limited Edition Widget', 1)
+                        ON CONFLICT (product_id) DO UPDATE SET stock = 1;
+                    """);
                 }
-            });
 
-        } catch (Throwable t) {
-            log.warn("[{}] Testcontainers launch unavailable (Docker daemon not accessible): {}. Using schema isolation on primary database.",
-                    sessionId, t.getMessage());
+                return new ReplayEnvironment(containerJdbcUrl, () -> {
+                    try {
+                        container.stop();
+                        log.info("[{}] Stopped Testcontainers Postgres container", sessionId);
+                    } catch (Exception e) {
+                        log.warn("Error stopping Testcontainers: {}", e.getMessage());
+                    }
+                });
+
+            } catch (Throwable t) {
+                log.warn("[{}] Testcontainers launch unavailable (Docker daemon not accessible): {}. Using schema isolation on primary database.",
+                        sessionId, t.getMessage());
+            }
         }
 
-        // 3. Fallback: Schema & State Isolation on primary Postgres
+        // 3. Fallback: Schema & State Isolation on primary Postgres (Mode 3)
+        log.warn("[{}] FALLING BACK to primary database reset (mode-3). " +
+                 "Concurrent replays are NOT safe in this mode. " +
+                 "Ensure Docker daemon is running for Testcontainers isolation.", sessionId);
+
         try {
             jdbcTemplate.execute("UPDATE inventory SET stock = 1 WHERE product_id = 'PRODUCT_X'");
             log.info("[{}] Reset inventory to stock=1 on primary database sandbox", sessionId);

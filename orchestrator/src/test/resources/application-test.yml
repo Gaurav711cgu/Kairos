@@ -1,0 +1,15 @@
+# Test profile: use primary DB / in-memory or fallback, no Neon branch, no Testcontainers
+replay:
+  mode: PRIMARY_RESET
+
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/demo}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:postgres}
+
+llmAnalyzer:
+  url: http://localhost:8092
+
+anomalyDetector:
+  url: http://localhost:8091

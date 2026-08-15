@@ -2,6 +2,7 @@ package com.timemachine.replay;
 
 import com.timemachine.store.Snapshot;
 import com.timemachine.store.SnapshotRepository;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,13 +28,26 @@ public class ReplayOrchestrator {
     private final ReplaySessionRepository sessionRepository;
 
     private final RestTemplate restTemplate = new RestTemplate();
-    private final Semaphore replaySlots = new Semaphore(2);
+    private Semaphore replaySlots = new Semaphore(2);
 
     @Value("${replay.target-url:${REPLAY_TARGET_URL:http://localhost:8080}}")
     private String replayTargetUrl;
 
-    @Value("${llmAnalyzer.url:http://localhost:8092}")
+    @Value("${anomalyDetector.url:${ANOMALY_DETECTOR_URL:http://localhost:8091}}")
+    private String anomalyDetectorUrl;
+
+    @Value("${llmAnalyzer.url:${LLM_ANALYZER_URL:http://localhost:8092}}")
     private String llmAnalyzerUrl;
+
+    @PostConstruct
+    public void init() {
+        // Mode-3 (PRIMARY_RESET) is not concurrent-safe: only 1 slot
+        // Neon and Testcontainers are isolated: 2 slots
+        int permits = (dbRestorer.getActiveMode() == ReplayMode.PRIMARY_RESET) ? 1 : 2;
+        this.replaySlots = new Semaphore(permits);
+        log.info("Initialized ReplayOrchestrator with {} concurrent replay slots (Mode: {})",
+                permits, dbRestorer.getActiveMode());
+    }
 
     public ReplaySession startReplay(String sessionId, String startTraceId, List<String> services) {
         String effectiveSessionId = (sessionId != null && !sessionId.isBlank()) ? sessionId : UUID.randomUUID().toString();
@@ -85,25 +99,36 @@ public class ReplayOrchestrator {
 
             ReplayTrace trace = httpReplayer.replay(snapshots, replayTargetUrl, dbEnv.jdbcUrl(), sessionId);
 
-            // Step 5: Collect trace
+            // Step 5: Collect trace & fetch real anomaly score
             sessionRepository.updateStatus(sessionId, ReplayStatus.COLLECTING_TRACE, null);
+            double anomalyScore = fetchAnomalyScore(sessionId);
+            ReplayTrace traceWithScore = new ReplayTrace(
+                trace.sessionId(),
+                trace.events(),
+                trace.dbStateBefore(),
+                trace.dbStateAfter(),
+                trace.racingConditionDetected(),
+                trace.racingSnapshotId(),
+                anomalyScore
+            );
 
             // Step 6: Analyze with LLM
             sessionRepository.updateStatus(sessionId, ReplayStatus.ANALYZING, null);
-            Map<String, Object> rcaReport = requestLlmRca(trace, sessionId);
+            Map<String, Object> rcaReport = requestLlmRca(traceWithScore, sessionId);
 
             // Step 7: Complete
             Map<String, Object> traceMap = Map.of(
-                "events", trace.events(),
-                "dbStateBefore", trace.dbStateBefore(),
-                "dbStateAfter", trace.dbStateAfter(),
-                "racingConditionDetected", trace.racingConditionDetected(),
-                "racingSnapshotId", trace.racingSnapshotId() != null ? trace.racingSnapshotId() : "",
+                "events", traceWithScore.events(),
+                "dbStateBefore", traceWithScore.dbStateBefore(),
+                "dbStateAfter", traceWithScore.dbStateAfter(),
+                "racingConditionDetected", traceWithScore.racingConditionDetected(),
+                "racingSnapshotId", traceWithScore.racingSnapshotId() != null ? traceWithScore.racingSnapshotId() : "",
+                "anomalyScore", traceWithScore.anomalyScore(),
                 "dbDiffs", List.of(
                     Map.of(
                         "tableName", "inventory",
-                        "before", trace.dbStateBefore().getOrDefault("inventory", Map.of("PRODUCT_X", Map.of("stock", 1))),
-                        "after", trace.dbStateAfter().getOrDefault("inventory", Map.of("PRODUCT_X", Map.of("stock", trace.racingConditionDetected() ? -1 : 0))),
+                        "before", traceWithScore.dbStateBefore().getOrDefault("inventory", Map.of("PRODUCT_X", Map.of("stock", 1))),
+                        "after", traceWithScore.dbStateAfter().getOrDefault("inventory", Map.of("PRODUCT_X", Map.of("stock", traceWithScore.racingConditionDetected() ? -1 : 0))),
                         "changed", true
                     )
                 )
@@ -125,6 +150,22 @@ public class ReplayOrchestrator {
             }
             replaySlots.release();
         }
+    }
+
+    private double fetchAnomalyScore(String sessionId) {
+        try {
+            ResponseEntity<Map> resp = restTemplate.getForEntity(
+                anomalyDetectorUrl + "/score/latest", Map.class);
+            if (resp.getStatusCode().is2xxSuccessful() && resp.getBody() != null) {
+                Object score = resp.getBody().get("score");
+                if (score instanceof Number num) {
+                    return num.doubleValue();
+                }
+            }
+        } catch (Exception e) {
+            log.warn("[{}] Could not fetch anomaly score: {} - using 0.0 default", sessionId, e.getMessage());
+        }
+        return 0.0;
     }
 
     private Map<String, Object> requestLlmRca(ReplayTrace trace, String sessionId) {
@@ -149,7 +190,7 @@ public class ReplayOrchestrator {
                     "db_state_after", trace.dbStateAfter(),
                     "racing_condition_detected", trace.racingConditionDetected(),
                     "racing_snapshot_ids", trace.racingSnapshotId() != null ? List.of(trace.racingSnapshotId()) : List.of(),
-                    "anomaly_score", -0.45
+                    "anomaly_score", trace.anomalyScore()
                 ),
                 "context", "Simulated concurrent order checkout race condition."
             );

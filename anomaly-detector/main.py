@@ -1,10 +1,20 @@
 """FastAPI anomaly detection service."""
 import os
+import sys
 import time
 from typing import Optional
 from contextlib import asynccontextmanager
 
 import numpy as np
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
+from pydantic import BaseModel, Field
+from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from detector import AnomalyDetector, MetricsWindow
+
 try:
     import structlog
     log = structlog.get_logger()
@@ -35,7 +45,7 @@ async def lifespan(app: FastAPI):
     log.info("shutting_down")
 
 app = FastAPI(
-    title="Distributed State Time Machine — Anomaly Detector",
+    title="Distributed State Time Machine - Anomaly Detector",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -59,7 +69,7 @@ class PredictionResponse(BaseModel):
     is_anomaly: bool
     score: float
     confidence: float
-    should_capture: bool  # True when is_anomaly and confidence > 0.7
+    should_capture: bool
     features: dict
     inference_time_us: float
     model_age_hours: float
@@ -97,6 +107,17 @@ async def predict(req: MetricsRequest):
         model_age_hours=result.model_age_hours,
     )
 
+@app.get("/score/latest")
+async def get_latest_score():
+    """Returns the most recent anomaly score computed by the detector."""
+    if detector is None:
+        return {"score": 0.0, "is_anomaly": False, "computed_at": ""}
+    return {
+        "score": detector.last_score,
+        "is_anomaly": detector.last_is_anomaly,
+        "computed_at": detector.last_computed_at
+    }
+
 @app.get("/health")
 async def health():
     return {
@@ -115,8 +136,6 @@ async def retrain():
     """Trigger model retraining (called by scheduled job)."""
     if detector is None:
         raise HTTPException(503, "Detector not initialized")
-    # In production: load real historical data from Postgres
-    # For demo: retrain with fresh synthetic data
     rng = np.random.default_rng()
     synthetic = np.column_stack([
         rng.uniform(80, 200, 2000),

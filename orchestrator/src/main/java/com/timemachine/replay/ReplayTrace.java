@@ -9,5 +9,17 @@ public record ReplayTrace(
     Map<String, Object> dbStateBefore,
     Map<String, Object> dbStateAfter,
     boolean racingConditionDetected,
-    String racingSnapshotId
-) {}
+    String racingSnapshotId,
+    double anomalyScore
+) {
+    public ReplayTrace(
+        String sessionId,
+        List<ReplayEvent> events,
+        Map<String, Object> dbStateBefore,
+        Map<String, Object> dbStateAfter,
+        boolean racingConditionDetected,
+        String racingSnapshotId
+    ) {
+        this(sessionId, events, dbStateBefore, dbStateAfter, racingConditionDetected, racingSnapshotId, 0.0);
+    }
+}

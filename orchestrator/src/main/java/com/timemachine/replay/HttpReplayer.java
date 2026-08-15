@@ -53,8 +53,23 @@ public class HttpReplayer {
             String replayDbUrl,
             String sessionId) {
 
+        if (orderedSnapshots == null || orderedSnapshots.isEmpty()) {
+            log.warn("[{}] No snapshots found for replay. Cannot fabricate results. " +
+                     "Ensure the capture agent is running and trigger-race.sh was executed " +
+                     "before starting the replay.", sessionId);
+            return new ReplayTrace(
+                sessionId,
+                List.of(),
+                Map.of(),
+                Map.of(),
+                false,
+                null,
+                0.0
+            );
+        }
+
         log.info("[{}] Executing real distributed replay of {} snapshots against {}",
-                sessionId, orderedSnapshots != null ? orderedSnapshots.size() : 0, targetBaseUrl);
+                sessionId, orderedSnapshots.size(), targetBaseUrl);
 
         // 1. Inspect real database state BEFORE replay
         Map<String, Object> dbBefore = queryDatabaseState(replayDbUrl);
@@ -64,61 +79,43 @@ public class HttpReplayer {
         boolean vectorClockRaceDetected = false;
         String racingSnapshotId = null;
 
-        if (orderedSnapshots != null && !orderedSnapshots.isEmpty()) {
-            // Check for causal concurrency across snapshots
-            for (int i = 0; i < orderedSnapshots.size(); i++) {
-                for (int j = i + 1; j < orderedSnapshots.size(); j++) {
-                    Snapshot s1 = orderedSnapshots.get(i);
-                    Snapshot s2 = orderedSnapshots.get(j);
-                    if (s1.vectorClock() != null && s2.vectorClock() != null) {
-                        if (s1.vectorClock().compare(s2.vectorClock()) == CausalRelation.CONCURRENT) {
-                            vectorClockRaceDetected = true;
-                            racingSnapshotId = s1.snapshotId();
-                            break;
-                        }
+        // Check for causal concurrency across snapshots
+        for (int i = 0; i < orderedSnapshots.size(); i++) {
+            for (int j = i + 1; j < orderedSnapshots.size(); j++) {
+                Snapshot s1 = orderedSnapshots.get(i);
+                Snapshot s2 = orderedSnapshots.get(j);
+                if (s1.vectorClock() != null && s2.vectorClock() != null) {
+                    if (s1.vectorClock().compare(s2.vectorClock()) == CausalRelation.CONCURRENT) {
+                        vectorClockRaceDetected = true;
+                        racingSnapshotId = s1.snapshotId();
+                        break;
                     }
                 }
-                if (vectorClockRaceDetected) break;
+            }
+            if (vectorClockRaceDetected) break;
+        }
+
+        // Build causal tiers from vector clock happens-before relationships
+        Map<Integer, List<Snapshot>> tiers = buildCausalTiers(orderedSnapshots);
+
+        // Execute tier by tier: concurrent snapshots within a tier fire simultaneously via Virtual Threads
+        for (Map.Entry<Integer, List<Snapshot>> tierEntry : tiers.entrySet()) {
+            int tierRank = tierEntry.getKey();
+            List<Snapshot> tierSnapshots = tierEntry.getValue();
+            log.info("[{}] Dispatching tier {} ({} concurrent requests) via Java 21 Virtual Threads",
+                    sessionId, tierRank, tierSnapshots.size());
+
+            List<CompletableFuture<Void>> futures = new ArrayList<>();
+            for (Snapshot snap : tierSnapshots) {
+                CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+                    ReplayEvent ev = executeRealHttpRequest(snap, targetBaseUrl, tierRank);
+                    events.add(ev);
+                }, virtualExecutor);
+                futures.add(future);
             }
 
-            // Group snapshots by causal tier (sequential vs concurrent tiers)
-            Map<Integer, List<Snapshot>> tiers = new TreeMap<>();
-            for (int i = 0; i < orderedSnapshots.size(); i++) {
-                Snapshot s = orderedSnapshots.get(i);
-                int position = (int) (s.sequenceNum() % 100);
-                tiers.computeIfAbsent(position, k -> new ArrayList<>()).add(s);
-            }
-
-            // Execute tier by tier: concurrent snapshots within a tier fire simultaneously via Virtual Threads
-            for (Map.Entry<Integer, List<Snapshot>> tierEntry : tiers.entrySet()) {
-                int tierRank = tierEntry.getKey();
-                List<Snapshot> tierSnapshots = tierEntry.getValue();
-                log.info("[{}] Dispatching tier {} ({} concurrent requests) via Java 21 Virtual Threads",
-                        sessionId, tierRank, tierSnapshots.size());
-
-                List<CompletableFuture<Void>> futures = new ArrayList<>();
-                for (Snapshot snap : tierSnapshots) {
-                    CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
-                        ReplayEvent ev = executeRealHttpRequest(snap, targetBaseUrl, tierRank);
-                        events.add(ev);
-                    }, virtualExecutor);
-                    futures.add(future);
-                }
-
-                // Await all concurrent requests in this causal tier before advancing
-                CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
-            }
-        } else {
-            // Fallback synthetic demonstration event if no snapshots were previously recorded
-            log.info("[{}] No stored snapshots found, executing live race probe...", sessionId);
-            Snapshot probeA = new Snapshot(UUID.randomUUID(), "probe-alice", "order-service", "trace-probe", null, null, "POST", "/orders", "{\"productId\":\"PRODUCT_X\",\"userId\":\"user-alice\"}", 200, "{\"status\":\"CREATED\"}", 15L, 1, 1L, java.time.Instant.now());
-            Snapshot probeB = new Snapshot(UUID.randomUUID(), "probe-bob", "order-service", "trace-probe", null, null, "POST", "/orders", "{\"productId\":\"PRODUCT_X\",\"userId\":\"user-bob\"}", 200, "{\"status\":\"CREATED\"}", 15L, 1, 2L, java.time.Instant.now());
-
-            CompletableFuture<Void> f1 = CompletableFuture.runAsync(() -> events.add(executeRealHttpRequest(probeA, targetBaseUrl, 0)), virtualExecutor);
-            CompletableFuture<Void> f2 = CompletableFuture.runAsync(() -> events.add(executeRealHttpRequest(probeB, targetBaseUrl, 0)), virtualExecutor);
-            CompletableFuture.allOf(f1, f2).join();
-            vectorClockRaceDetected = true;
-            racingSnapshotId = "probe-alice";
+            // Await all concurrent requests in this causal tier before advancing
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
         }
 
         // 2. Inspect real database state AFTER replay
@@ -147,8 +144,45 @@ public class HttpReplayer {
             dbBefore,
             dbAfter,
             finalRaceDetected,
-            racingSnapshotId
+            racingSnapshotId,
+            0.0
         );
+    }
+
+    public Map<Integer, List<Snapshot>> buildCausalTiers(List<Snapshot> snapshots) {
+        // Topological sort: assign tier = length of longest happens-before chain
+        // ending at each snapshot. Concurrent events get the same tier rank.
+        Map<String, Integer> tierRank = new HashMap<>();
+
+        for (Snapshot s : snapshots) {
+            tierRank.put(s.snapshotId(), 0);
+        }
+
+        // For each snapshot, find the maximum tier of all snapshots that
+        // happen-before it, then assign tier = max + 1
+        for (Snapshot s : snapshots) {
+            int maxPredecessorTier = -1;
+            for (Snapshot other : snapshots) {
+                if (other.snapshotId().equals(s.snapshotId())) continue;
+                if (other.vectorClock() != null && s.vectorClock() != null) {
+                    CausalRelation rel = other.vectorClock().compare(s.vectorClock());
+                    if (rel == CausalRelation.HAPPENS_BEFORE) {
+                        maxPredecessorTier = Math.max(maxPredecessorTier,
+                            tierRank.getOrDefault(other.snapshotId(), 0));
+                    }
+                }
+            }
+            tierRank.put(s.snapshotId(), maxPredecessorTier + 1);
+        }
+
+        // Group by tier rank (TreeMap ensures ascending tier order)
+        Map<Integer, List<Snapshot>> tiers = new TreeMap<>();
+        for (Snapshot s : snapshots) {
+            int rank = tierRank.getOrDefault(s.snapshotId(), 0);
+            tiers.computeIfAbsent(rank, k -> new ArrayList<>()).add(s);
+        }
+
+        return tiers;
     }
 
     private ReplayEvent executeRealHttpRequest(Snapshot snap, String targetBaseUrl, int causalPosition) {

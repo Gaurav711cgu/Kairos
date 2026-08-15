@@ -1,9 +1,24 @@
 """LangChain chain for structured RCA output."""
 import os
+import sys
 import json
 import time
 from typing import Optional
 from tenacity import retry, stop_after_attempt, wait_exponential
+
+try:
+    from langchain_google_genai import ChatGoogleGenerativeAI
+    from langchain_core.messages import SystemMessage, HumanMessage
+    from langchain_core.output_parsers import PydanticOutputParser
+except ImportError:
+    ChatGoogleGenerativeAI = None
+    SystemMessage = None
+    HumanMessage = None
+    PydanticOutputParser = None
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from models import RcaReport, ReplayTrace, AnalysisResponse
+from prompts import SYSTEM_PROMPT, ANALYSIS_TEMPLATE, format_events
 
 try:
     import structlog
@@ -20,22 +35,30 @@ class RcaChain:
         if not api_key:
             log.warning("no_gemini_api_key_set")
         
-        self.model = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",  # Fast, cheap, structured output
-            google_api_key=api_key,
-            temperature=0.1,  # Low temperature for structured output
-            convert_system_message_to_human=True,
-        )
+        if ChatGoogleGenerativeAI is not None:
+            self.model = ChatGoogleGenerativeAI(
+                model="gemini-2.5-flash",  # Fast, structured output
+                google_api_key=api_key,
+                temperature=0.1,  # Low temperature for structured output
+            )
+        else:
+            self.model = None
         
-        self.parser = PydanticOutputParser(pydantic_object=RcaReport)
-        self.format_instructions = self.parser.get_format_instructions()
+        if PydanticOutputParser is not None:
+            self.parser = PydanticOutputParser(pydantic_object=RcaReport)
+            self.format_instructions = self.parser.get_format_instructions()
+        else:
+            self.parser = None
+            self.format_instructions = "{}"
     
     @retry(
         stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=4, max=60),  # Handles rate limits
+        wait=wait_exponential(multiplier=1, min=4, max=60),
     )
     def _call_llm(self, prompt_text: str) -> str:
         """Call Gemini with retry on rate limit (429) errors."""
+        if self.model is None or SystemMessage is None:
+            raise RuntimeError("Gemini model client not installed")
         messages = [
             SystemMessage(content=SYSTEM_PROMPT),
             HumanMessage(content=prompt_text),
@@ -46,7 +69,7 @@ class RcaChain:
     def analyze(self, trace: ReplayTrace, context: str = "") -> AnalysisResponse:
         """Run RCA analysis. Returns AnalysisResponse with rca=None on LLM failure.
         
-        The replay session ALWAYS completes — LLM analysis is best-effort.
+        The replay session ALWAYS completes - LLM analysis is best-effort.
         Failure returns trace without RCA, never fails the replay.
         """
         start_ms = time.time() * 1000
@@ -87,14 +110,18 @@ class RcaChain:
             elif '```' in raw:
                 raw = raw.split('```')[1].split('```')[0].strip()
             
-            rca = self.parser.parse(raw)
+            if self.parser is not None:
+                rca = self.parser.parse(raw)
+            else:
+                data = json.loads(raw)
+                rca = RcaReport.model_validate(data)
             
             latency_ms = time.time() * 1000 - start_ms
-            log.info("rca_complete",
-                session_id=trace.session_id,
-                pattern=rca.root_cause.pattern,
-                latency_ms=f"{latency_ms:.0f}",
-                confidence=rca.primary_fix.confidence)
+            log.info("rca_complete: session=%s pattern=%s latency=%.0fms confidence=%.2f",
+                trace.session_id,
+                rca.root_cause.pattern,
+                latency_ms,
+                rca.primary_fix.confidence)
             
             return AnalysisResponse(
                 session_id=trace.session_id,
@@ -105,7 +132,7 @@ class RcaChain:
         
         except Exception as e:
             latency_ms = time.time() * 1000 - start_ms
-            log.error("rca_failed", session_id=trace.session_id, error=str(e))
+            log.error("rca_failed: session=%s error=%s", trace.session_id, str(e))
             return AnalysisResponse(
                 session_id=trace.session_id,
                 rca=None,
