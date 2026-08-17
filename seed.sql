@@ -1,4 +1,4 @@
--- Seed data for demo: one product with stock=1 (single item = easy race)
+-- Seed data for production demo: realistic product catalog + contested race item
 CREATE TABLE IF NOT EXISTS inventory (
     product_id   VARCHAR(50) PRIMARY KEY,
     name         VARCHAR(255) NOT NULL,
@@ -13,10 +13,29 @@ CREATE TABLE IF NOT EXISTS orders (
     created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- Insert the contested product
+-- Insert realistic production product catalog
 INSERT INTO inventory (product_id, name, stock)
-VALUES ('PRODUCT_X', 'Limited Edition Widget', 1)
-ON CONFLICT (product_id) DO UPDATE SET stock = 1;
+VALUES 
+    ('PRODUCT_X', 'Limited Edition AI Accelerator Card', 1),
+    ('PROD_LAPTOP_01', 'Developer Workstation Pro 16', 45),
+    ('PROD_MONITOR_02', '4K Ultra-Wide IPS Display', 120),
+    ('PROD_KEYBOARD_03', 'Low-Profile Mechanical Keyboard', 250),
+    ('PROD_MOUSE_04', 'Ergonomic Precision Wireless Mouse', 310),
+    ('PROD_HEADSET_05', 'Active Noise-Cancelling Headset', 85),
+    ('PROD_DOCK_06', 'Thunderbolt 4 Quad-Display Dock', 60),
+    ('PROD_SERVER_07', '1U Rackmount Edge Compute Node', 12),
+    ('PROD_ROUTER_08', 'Enterprise 10GbE Core Router', 8),
+    ('PROD_CABLE_09', 'Cat6A Shielded Patch Cable 2m', 1500)
+ON CONFLICT (product_id) DO UPDATE SET stock = EXCLUDED.stock;
+
+-- Insert historical baseline orders
+INSERT INTO orders (order_id, user_id, product_id, status, created_at)
+VALUES
+    ('ord-hist-101', 'user-001', 'PROD_LAPTOP_01', 'COMPLETED', CURRENT_TIMESTAMP - INTERVAL '2 hours'),
+    ('ord-hist-102', 'user-002', 'PROD_MONITOR_02', 'COMPLETED', CURRENT_TIMESTAMP - INTERVAL '90 minutes'),
+    ('ord-hist-103', 'user-003', 'PROD_KEYBOARD_03', 'COMPLETED', CURRENT_TIMESTAMP - INTERVAL '45 minutes'),
+    ('ord-hist-104', 'user-004', 'PROD_HEADSET_05', 'COMPLETED', CURRENT_TIMESTAMP - INTERVAL '20 minutes')
+ON CONFLICT (order_id) DO NOTHING;
 
 -- Snapshot store schema (for orchestrator)
 CREATE TABLE IF NOT EXISTS snapshots (
