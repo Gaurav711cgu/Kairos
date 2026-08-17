@@ -91,8 +91,14 @@ class TestAnomalyDetector:
         """Retraining should update model_age."""
         before = detector.trained_at
         time.sleep(0.01)
-        rng = np.random.default_rng()
-        data = rng.uniform(0, 1, (500, 5))
+        rng = np.random.default_rng(42)
+        data = np.column_stack([
+            rng.uniform(80, 200, 500),
+            rng.uniform(0, 2, 500),
+            rng.uniform(5, 50, 500),
+            rng.uniform(1.2, 3.0, 500),
+            rng.integers(1, 3, 500),
+        ])
         detector.retrain(data)
         assert detector.trained_at > before
     

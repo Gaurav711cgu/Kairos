@@ -70,15 +70,6 @@ class AnomalyDetector:
     
     def _initialize_model(self):
         """Load pre-trained model or train from real/synthetic data."""
-        if os.path.exists(self.MODEL_PATH):
-            try:
-                self.model = joblib.load(self.MODEL_PATH)
-                self.trained_at = os.path.getmtime(self.MODEL_PATH)
-                log.info("Loaded existing model from %s", self.MODEL_PATH)
-                return
-            except Exception as e:
-                log.warning("Failed to load model from %s: %s", self.MODEL_PATH, e)
-        
         if os.path.exists(self.REAL_DATA_PATH):
             try:
                 import pandas as pd
@@ -88,6 +79,15 @@ class AnomalyDetector:
                 return
             except Exception as e:
                 log.warning("Could not load real traffic: %s", e)
+
+        if os.path.exists(self.MODEL_PATH):
+            try:
+                self.model = joblib.load(self.MODEL_PATH)
+                self.trained_at = os.path.getmtime(self.MODEL_PATH)
+                log.info("Loaded existing model from %s", self.MODEL_PATH)
+                return
+            except Exception as e:
+                log.warning("Failed to load model from %s: %s", self.MODEL_PATH, e)
         
         log.info("Training initial model with synthetic data")
         self._train_with_synthetic_data()
