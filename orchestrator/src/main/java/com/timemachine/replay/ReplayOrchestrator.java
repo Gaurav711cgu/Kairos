@@ -28,7 +28,7 @@ public class ReplayOrchestrator {
     private final ReplaySessionRepository sessionRepository;
 
     private final RestTemplate restTemplate = new RestTemplate();
-    private Semaphore replaySlots = new Semaphore(2);
+    private Semaphore replaySlots;
 
     @Value("${replay.target-url:${REPLAY_TARGET_URL:http://localhost:8080}}")
     private String replayTargetUrl;

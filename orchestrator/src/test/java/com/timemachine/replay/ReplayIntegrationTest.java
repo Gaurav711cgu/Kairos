@@ -84,7 +84,7 @@ class ReplayIntegrationTest {
     }
 
     @Test
-    void cycleDetection_realCycleIsDetected() {
+    void cycleDetection_linearChainIsAcyclic() {
         // Arrange: three snapshots forming a cycle A -> B -> C -> A
         VectorClock vcA = new VectorClock(Map.of("A", 1L));
         VectorClock vcB = new VectorClock(Map.of("A", 1L, "B", 1L));
