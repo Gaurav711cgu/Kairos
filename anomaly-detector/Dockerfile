@@ -7,6 +7,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY *.py .
+COPY scripts/ scripts/
 
 # Non-root user for security
 RUN useradd -m -r appuser && chown -R appuser /app /tmp

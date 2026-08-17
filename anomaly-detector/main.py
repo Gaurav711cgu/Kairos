@@ -84,7 +84,7 @@ async def predict(req: MetricsRequest):
         latency_p99_ms=req.latency_p99_ms,
         error_rate_percent=req.error_rate_percent,
         requests_per_second=req.requests_per_second,
-        latency_p50_ms=req.latency_p50_ms or req.latency_p99_ms,
+        latency_p50_ms=req.latency_p50_ms if req.latency_p50_ms > 0 else req.latency_p99_ms,
         concurrent_requests=req.concurrent_requests,
         timestamp_ms=req.timestamp_ms or int(time.time() * 1000),
     )

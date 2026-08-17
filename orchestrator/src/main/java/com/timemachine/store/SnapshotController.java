@@ -5,6 +5,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -46,8 +47,22 @@ public class SnapshotController {
     }
 
     @GetMapping("/{snapshotId}/full")
-    public ResponseEntity<SnapshotDTO> getFullSnapshot(@PathVariable String snapshotId) {
-        return ResponseEntity.ok(null);
+    public ResponseEntity<Map<String, Object>> getFullSnapshot(@PathVariable String snapshotId) {
+        List<Snapshot> snapshots = repository.findNewSinceSequence(0);
+        Snapshot match = snapshots.stream()
+                .filter(s -> snapshotId.equals(s.snapshotId()))
+                .findFirst()
+                .orElse(null);
+
+        if (match == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        byte[] payload = storageClient.downloadSnapshot(match.storageKey());
+        Map<String, Object> result = new HashMap<>();
+        result.put("snapshot", match);
+        result.put("payloadBytes", payload != null ? payload.length : 0);
+        return ResponseEntity.ok(result);
     }
 
     @GetMapping("/ordered")

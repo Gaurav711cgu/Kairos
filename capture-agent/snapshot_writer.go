@@ -11,6 +11,8 @@ import (
 
     "github.com/klauspost/compress/zstd"
     "golang.org/x/sync/semaphore"
+    "io"
+    "sync"
 )
 
 type RawSnapshot struct {
@@ -33,18 +35,22 @@ type SnapshotWriter struct {
     cfg       Config
     ch        <-chan RawSnapshot
     sem       *semaphore.Weighted
-    encoder   *zstd.Encoder
+    encPool   sync.Pool
     client    *http.Client
     metrics   *AgentMetrics
 }
 
 func NewSnapshotWriter(cfg Config, ch <-chan RawSnapshot, m *AgentMetrics) *SnapshotWriter {
-    enc, _ := zstd.NewWriter(nil, zstd.WithEncoderLevel(zstd.SpeedDefault)) // level 3
     return &SnapshotWriter{
         cfg:     cfg,
         ch:      ch,
         sem:     semaphore.NewWeighted(int64(cfg.SemaphoreSize)),
-        encoder: enc,
+        encPool: sync.Pool{
+            New: func() any {
+                enc, _ := zstd.NewWriter(nil, zstd.WithEncoderLevel(zstd.SpeedDefault))
+                return enc
+            },
+        },
         client:  &http.Client{Timeout: 10 * time.Second},
         metrics: m,
     }
@@ -72,8 +78,6 @@ func (w *SnapshotWriter) Run(ctx context.Context) {
                 if err := w.write(ctx, s); err != nil {
                     slog.Error("snapshot write failed", "snapshotId", s.SnapshotID, "err", err)
                     w.metrics.WriteErrors.Inc()
-                } else {
-                    w.metrics.SnapshotWritten.Inc()
                 }
             }(snap)
         }
@@ -104,50 +108,39 @@ func (w *SnapshotWriter) write(ctx context.Context, snap RawSnapshot) error {
     }
     
     // 2. zstd compress (level 3, ~50-100μs for 10KB payload)
-    compressed := w.encoder.EncodeAll(payloadJSON, make([]byte, 0, len(payloadJSON)/3))
-    
-    // 3. POST metadata to orchestrator snapshot store
-    metadata := map[string]any{
-        "snapshot_id":      snap.SnapshotID,
-        "service_id":       snap.ServiceID,
-        "trace_id":         snap.TraceID,
-        "vector_clock":     snap.VectorClock,
-        "method":           snap.Method,
-        "path":             snap.Path,
-        "request_headers":  snap.RequestHeaders,
-        "request_body":     string(snap.RequestBody),
-        "response_status":  snap.ResponseStatus,
-        "response_headers": snap.ResponseHeaders,
-        "response_body":    string(snap.ResponseBody),
-        "latency_ms":       snap.LatencyMs,
-        "schema_version":   1,
-    }
-    metaJSON, _ := json.Marshal(metadata)
-    
+    enc := w.encPool.Get().(*zstd.Encoder)
+    compressed := enc.EncodeAll(payloadJSON, make([]byte, 0, len(payloadJSON)/3))
+    w.encPool.Put(enc)
+
     req, err := http.NewRequestWithContext(ctx, http.MethodPost,
         w.cfg.SnapshotStoreURL+"/snapshots",
-        bytes.NewReader(metaJSON))
+        bytes.NewReader(compressed))
     if err != nil {
         return fmt.Errorf("build request: %w", err)
     }
     req.Header.Set("Content-Type", "application/json")
-    
+    req.Header.Set("Content-Encoding", "zstd")
+
     resp, err := w.client.Do(req)
     if err != nil {
         return fmt.Errorf("post to store: %w", err)
     }
-    resp.Body.Close()
-    
+    defer resp.Body.Close()
+    io.Copy(io.Discard, resp.Body)
+
     if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
         slog.Warn("snapshot store returned non-201", "status", resp.StatusCode, "id", snap.SnapshotID)
+        return fmt.Errorf("unexpected status: %d", resp.StatusCode)
     }
-    
+
+    w.metrics.SnapshotWritten.Inc()
+
     slog.Debug("snapshot written",
         "id", snap.SnapshotID,
         "service", snap.ServiceID,
         "path", snap.Path,
         "compressedBytes", len(compressed),
         "originalBytes", len(payloadJSON))
-    
+
     return nil
 }

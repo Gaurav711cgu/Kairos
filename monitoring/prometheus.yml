@@ -23,6 +23,3 @@ scrape_configs:
       - targets: ['llm-analyzer:8092']
     metrics_path: /metrics
 
-  - job_name: 'postgres'
-    static_configs:
-      - targets: ['postgres:5432']

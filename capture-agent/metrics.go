@@ -15,7 +15,6 @@ type AgentMetrics struct {
     SnapshotWritten prometheus.Counter
     SnapshotDropped prometheus.Counter
     WriteErrors     prometheus.Counter
-    dropped         atomic.Int64
     registry        *prometheus.Registry
 }
 
@@ -71,5 +70,4 @@ func NewAgentMetrics() *AgentMetrics {
     return m
 }
 
-func (m *AgentMetrics) DroppedTotal() int64 { return m.dropped.Load() }
 func (m *AgentMetrics) Handler() http.Handler { return promhttp.HandlerFor(m.registry, promhttp.HandlerOpts{}) }

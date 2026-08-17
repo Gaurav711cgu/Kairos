@@ -203,25 +203,12 @@ public class ReplayOrchestrator {
             log.warn("[{}] LLM RCA call failed or timed out: {}", sessionId, e.getMessage());
         }
 
-        // Graceful fallback RCA if LLM unavailable
+        // Return honest unavailable response when LLM is unreachable
         return Map.of(
-            "root_cause", Map.of(
-                "pattern", "TOCTOU_RACE_CONDITION",
-                "description", "Two concurrent requests both read stock=1 and proceeded to decrement without holding a distributed lock or database row lock.",
-                "affected_services", List.of("order-service", "inventory-service"),
-                "evidence", List.of("Concurrent reads at causal position 0", "Inventory stock decremented to -1")
-            ),
-            "contributing_factors", List.of("40ms payment processing latency widened the race window", "Missing SELECT FOR UPDATE on inventory table"),
-            "primary_fix", Map.of(
-                "description", "Acquire an exclusive lock during stock validation to prevent concurrent reads from seeing stale inventory.",
-                "code_location", "inventory-service: GET /inventory/{productId}",
-                "suggested_change", "SELECT stock FROM inventory WHERE product_id = ? FOR UPDATE",
-                "code_diff", "-SELECT stock FROM inventory WHERE product_id = ?\n+SELECT stock FROM inventory WHERE product_id = ? FOR UPDATE",
-                "confidence", 0.95
-            ),
-            "secondary_fixes", List.of(),
-            "trace_summary", "Concurrent orders both read stock=1 simultaneously. Both payments succeeded. Both decrements executed, leading to an over-sold condition.",
-            "severity", "HIGH",
+            "status", "LLM_ANALYSIS_UNAVAILABLE",
+            "error", "The LLM analyzer service did not respond. Root cause analysis requires the llm-analyzer service to be running.",
+            "trace_summary", "Replay completed but automated root cause analysis could not be performed.",
+            "severity", "UNKNOWN",
             "schema_version", 1
         );
     }

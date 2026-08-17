@@ -45,7 +45,7 @@ func TestVectorClockToHeader(t *testing.T) {
 	vc.clocks["svc1"] = 1
 	vc.clocks["svc2"] = 2
 	
-	header := vc.snapshot().ToHeader()
+	header := vc.snapshot(vc.hlc.Now()).ToHeader()
 	expected := "svc1:1,svc2:2"
 	if header != expected {
 		t.Errorf("expected %s, got %s", expected, header)
@@ -53,7 +53,7 @@ func TestVectorClockToHeader(t *testing.T) {
 }
 
 func TestVectorClockFromHeader(t *testing.T) {
-	parsed, err := parseHeader("svc1:1,svc2:2")
+	parsed, _, err := parseHeader("svc1:1,svc2:2")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -69,8 +69,8 @@ func TestVectorClockRoundTrip(t *testing.T) {
 	vc.clocks["svc1"] = 1
 	vc.clocks["svc2"] = 2
 	
-	header := vc.snapshot().ToHeader()
-	parsed, err := parseHeader(header)
+	header := vc.snapshot(vc.hlc.Now()).ToHeader()
+	parsed, _, err := parseHeader(header)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}

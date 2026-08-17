@@ -17,10 +17,6 @@ func main() {
         UpstreamHost:     getEnv("UPSTREAM_HOST", "localhost:8081"),
         ServiceID:        getEnv("SERVICE_ID", "order-service"),
         SnapshotStoreURL: getEnv("SNAPSHOT_STORE_URL", "http://localhost:8090"),
-        SupabaseURL:      getEnv("SUPABASE_URL", ""),
-        SupabaseKey:      getEnv("SUPABASE_ACCESS_KEY", ""),
-        SupabaseSecret:   getEnv("SUPABASE_SECRET_KEY", ""),
-        SupabaseBucket:   getEnv("SUPABASE_BUCKET", "snapshots"),
         ChannelSize:      100,
         SemaphoreSize:    5,
     }
@@ -46,6 +42,7 @@ func main() {
     // Prometheus metrics endpoint on :2112
     go func() {
         http.Handle("/metrics", agent.MetricsHandler())
+        http.HandleFunc("/debug/ring-buffer", agent.RingBufferHandler)
         http.ListenAndServe(":2112", nil)
     }()
     
@@ -80,10 +77,6 @@ type Config struct {
     UpstreamHost     string
     ServiceID        string
     SnapshotStoreURL string
-    SupabaseURL      string
-    SupabaseKey      string
-    SupabaseSecret   string
-    SupabaseBucket   string
     ChannelSize      int
     SemaphoreSize    int
 }

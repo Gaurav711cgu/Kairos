@@ -1,13 +1,55 @@
+# Environments
 .env
+.env.*
+!.env.example
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# IDEs
+.idea/
+.vscode/
+*.iml
+
+# Java / Build artifacts
 *.class
+*.jar
+*.war
 build/
 .gradle/
+target/
+
+# Python
 __pycache__/
 *.pyc
+*.joblib
+.pytest_cache/
+.venv/
+venv/
+htmlcov/
+.coverage
+.tox/
+
+# Node
 node_modules/
 .next/
 dist/
+coverage/
+
+# Go
+bin/
+*.exe
+
+# Logs & Temp
 *.log
-target/
-.DS_Store
-.pytest_cache/
+*.tmp
+*.temp
+*.zstd
+snapshot-store/
+tmp/
+temp/
+
+# Docker
+volumes/
+.docker/

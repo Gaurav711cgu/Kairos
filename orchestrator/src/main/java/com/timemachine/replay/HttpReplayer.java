@@ -219,8 +219,8 @@ public class HttpReplayer {
             log.info("Replayed {} {} -> status: {}", method, fullUrl, replayStatus);
 
         } catch (Exception e) {
-            log.warn("Replay HTTP request failed for {}: {} (using captured fallback)", fullUrl, e.getMessage());
-            replayStatus = capturedStatus;
+            log.warn("Replay HTTP request failed for {}: {}", fullUrl, e.getMessage());
+            replayStatus = 0;
         }
 
         long replayLatency = System.currentTimeMillis() - t0;
@@ -253,8 +253,8 @@ public class HttpReplayer {
             state.put("inventory", inventory);
 
         } catch (Exception e) {
-            log.warn("Could not query live DB state from {}: {}. Returning baseline.", jdbcUrl, e.getMessage());
-            state.put("inventory", Map.of("PRODUCT_X", Map.of("stock", 1)));
+            log.warn("Could not query live DB state from {}: {}. Returning empty state.", jdbcUrl, e.getMessage());
+            state.put("error", "Database query failed: " + e.getMessage());
         }
 
         return state;

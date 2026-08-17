@@ -52,9 +52,9 @@ def format_events(events: list) -> str:
     for e in sorted(events, key=lambda x: x.get('causal_position', 0)):
         match_indicator = "[MATCH]" if e.get('status_match') else "[MISMATCH]"
         lines.append(
-            f"  [{e['causal_position']:3d}] {e['service_id']:25s} "
-            f"{e['method']:6s} {e['path']:40s} "
-            f"{e['captured_status']} {match_indicator} "
-            f"({e['captured_latency_ms']:.0f}ms)"
+            f"  [{e.get('causal_position', 0):3d}] {e.get('service_id', 'unknown'):25s} "
+            f"{e.get('method', 'UNKNOWN'):6s} {e.get('path', '/'):40s} "
+            f"{e.get('captured_status', 0)} {match_indicator} "
+            f"({e.get('captured_latency_ms', 0):.0f}ms)"
         )
     return "\n".join(lines)

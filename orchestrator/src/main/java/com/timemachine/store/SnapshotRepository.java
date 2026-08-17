@@ -1,6 +1,5 @@
 package com.timemachine.store;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.timemachine.clock.VectorClock;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -17,7 +16,6 @@ import java.util.UUID;
 public class SnapshotRepository {
     
     private final JdbcTemplate jdbcTemplate;
-    private final ObjectMapper mapper;
 
     private final RowMapper<Snapshot> snapshotRowMapper = (rs, rowNum) -> new Snapshot(
         (UUID) rs.getObject("id"),

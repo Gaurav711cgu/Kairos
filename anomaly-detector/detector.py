@@ -57,7 +57,7 @@ class AnomalyResult:
 
 
 class AnomalyDetector:
-    MODEL_PATH = "/tmp/isolation_forest.joblib"
+    MODEL_PATH = os.environ.get("KAIROS_MODEL_PATH", os.path.join(os.path.dirname(__file__), "isolation_forest.joblib"))
     REAL_DATA_PATH = os.path.join(os.path.dirname(__file__), "scripts", "training_data.csv")
     
     def __init__(self):
@@ -76,8 +76,8 @@ class AnomalyDetector:
                 self.trained_at = os.path.getmtime(self.MODEL_PATH)
                 log.info("Loaded existing model from %s", self.MODEL_PATH)
                 return
-            except Exception:
-                pass
+            except Exception as e:
+                log.warning("Failed to load model from %s: %s", self.MODEL_PATH, e)
         
         if os.path.exists(self.REAL_DATA_PATH):
             try:
@@ -116,8 +116,8 @@ class AnomalyDetector:
         
         try:
             joblib.dump(self.model, self.MODEL_PATH)
-        except Exception:
-            pass
+        except Exception as e:
+            log.warning("Failed to save model to %s: %s", self.MODEL_PATH, e)
         log.info("Model trained with %d samples and saved to %s", n_samples, self.MODEL_PATH)
     
     def retrain(self, historical_data: np.ndarray):
@@ -132,8 +132,8 @@ class AnomalyDetector:
         self.trained_at = time.time()
         try:
             joblib.dump(self.model, self.MODEL_PATH)
-        except Exception:
-            pass
+        except Exception as e:
+            log.warning("Failed to save model to %s: %s", self.MODEL_PATH, e)
         log.info("Model retrained with %d samples", len(historical_data))
     
     def predict(self, metrics: MetricsWindow) -> AnomalyResult:
