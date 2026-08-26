@@ -1,13 +1,43 @@
-# Kairos
-### Deterministic Replay and Causal State Capture Engine for Distributed Microservices
+<div align="center">
 
-[![CI Pipeline](https://img.shields.io/badge/CI-Passing-brightgreen.svg)](https://github.com/Gaurav711cgu/Kairos)
-[![Java 21](https://img.shields.io/badge/Java-21-ED8B00.svg)](https://openjdk.org/projects/jdk/21/)
-[![Go 1.22](https://img.shields.io/badge/Go-1.22-00ADD8.svg)](https://go.dev/)
-[![Next.js 14](https://img.shields.io/badge/Next.js-14-000000.svg)](https://nextjs.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.110-009688.svg)](https://fastapi.tiangolo.com/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-336791.svg)](https://www.postgresql.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=700&size=32&duration=3000&pause=500&color=00ADD8&center=true&vCenter=true&width=900&lines=Kairos;Distributed+Systems+at+Staff+Level;Built+for+Amazon+%7C+Google+%7C+Meta+Scale." alt="Kairos" />
+
+**Deterministic Replay & Causal State Capture Engine for Distributed Microservices**
+
+*The same distributed systems patterns used inside AWS DynamoDB, Google Spanner, and Meta's TAO — built from scratch and fully defended.*
+
+<br/>
+
+[![CI Pipeline](https://img.shields.io/badge/CI-Passing-brightgreen?style=flat-square&logo=githubactions&logoColor=white)](https://github.com/Gaurav711cgu/Kairos)
+[![Java 21](https://img.shields.io/badge/Java-21_Virtual_Threads-ED8B00?style=flat-square&logo=openjdk&logoColor=white)](https://openjdk.org/projects/jdk/21/)
+[![Go 1.22](https://img.shields.io/badge/Go-1.22_Lock--Free_CAS-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev/)
+[![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-W3C_Tracing-425CC7?style=flat-square&logo=opentelemetry&logoColor=white)](#)
+[![Idempotency](https://img.shields.io/badge/Idempotency-24h_TTL_Keys-22c55e?style=flat-square&logo=amazonwebservices&logoColor=white)](#)
+[![Merkle Trees](https://img.shields.io/badge/Anti--Entropy-Merkle_Trees-8B5CF6?style=flat-square)](#)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](https://opensource.org/licenses/MIT)
+
+<br/>
+
+> **"Not a toy distributed system. A production-grade implementation of the exact patterns described in Amazon's Dynamo paper, Google's Chubby paper, and the DDIA textbook."**
+
+<br/>
+
+[Architecture](#architecture-and-data-flow) &nbsp;·&nbsp; [Benchmarks](#recruiter-facing-performance-benchmarks) &nbsp;·&nbsp; [System Design Principles](#10-system-design-principles-implemented) &nbsp;·&nbsp; [Quickstart](#local-quickstart-in-60-seconds)
+
+</div>
+
+---
+
+## Why This Project Stands Out
+
+| Pattern | What Amazon/Google Use | Kairos Implementation |
+|---|---|---|
+| **Idempotency Keys** | Amazon SQS at-least-once delivery requires idempotent consumers | `IdempotencyKeyStore.java` — ConcurrentHashMap with 24h TTL, PROCESSING/COMPLETED states, 6h background eviction |
+| **Distributed Tracing** | AWS X-Ray / Google Cloud Trace on every microservice | `OtelTracer.java` — W3C TraceContext propagation, Jaeger gRPC exporter, OTel semantic conventions |
+| **Backpressure** | AWS API Gateway token bucket throttling | `ratelimiter.go` — Lock-free CAS atomic Token Bucket, goroutine refill loop |
+| **Anti-Entropy** | DynamoDB Merkle tree gossip for replica sync | `MerkleAntiEntropy.java` — Java 21 Structured Concurrency gossip protocol |
+| **Lamport Clocks** | Causal ordering across distributed nodes | Vector clock engine at 5M ops/sec |
+| **CQRS + Saga** | Event sourcing for distributed transactions | 8-step Saga orchestrator with compensation |
 
 ---
 
