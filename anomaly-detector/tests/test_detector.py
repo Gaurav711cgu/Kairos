@@ -25,7 +25,7 @@ class TestAnomalyDetector:
         result = detector.predict(normal)
         assert isinstance(result.is_anomaly, bool)
         assert 0.0 <= result.confidence <= 1.0
-        assert result.inference_ms > 0
+        assert result.inference_time_us > 0
         assert hasattr(result, 'contributing_features')
     
     def test_race_condition_metrics_trigger_anomaly(self, detector):
@@ -58,7 +58,7 @@ class TestAnomalyDetector:
         latencies = []
         for _ in range(500):
             result = detector.predict(metrics)
-            latencies.append(result.inference_ms)
+            latencies.append(result.inference_time_us)
         
         p99 = np.percentile(latencies, 99)
         p50 = np.percentile(latencies, 50)
