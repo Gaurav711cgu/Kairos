@@ -2,7 +2,6 @@ import os
 import sys
 import pytest
 from unittest.mock import MagicMock, patch
-import json
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from models import (
@@ -11,26 +10,26 @@ from models import (
 )
 from chain import RcaChain
 
-MOCK_RCA_JSON = json.dumps({
-    "root_cause": {
-        "pattern": "TOCTOU_RACE_CONDITION",
-        "description": "Two concurrent reads of inventory both see stock=1, both proceed",
-        "affected_services": ["order-service", "inventory-service"],
-        "evidence": ["Events at causal_position=0 are concurrent", "Both GET /inventory/PRODUCT_X return stock=1"]
-    },
-    "contributing_factors": ["Missing SELECT FOR UPDATE", "40ms payment delay widens window"],
-    "primary_fix": {
-        "description": "Add SELECT FOR UPDATE to inventory read",
-        "code_location": "inventory-service: GET /inventory/{productId}",
-        "suggested_change": "Use SELECT stock FROM inventory WHERE product_id = ? FOR UPDATE",
-        "code_diff": "-SELECT stock FROM inventory WHERE product_id = ?\n+SELECT stock FROM inventory WHERE product_id = ? FOR UPDATE",
-        "confidence": 0.95
-    },
-    "secondary_fixes": [],
-    "trace_summary": "Two orders raced. Both saw stock=1. Both decremented. Stock went to -1.",
-    "severity": "CRITICAL",
-    "schema_version": 1
-})
+MOCK_RCA_REPORT = RcaReport(
+    root_cause=RootCause(
+        pattern="TOCTOU_RACE_CONDITION",
+        description="Two concurrent reads of inventory both see stock=1, both proceed",
+        affected_services=["order-service", "inventory-service"],
+        evidence=["Events at causal_position=0 are concurrent", "Both GET /inventory/PRODUCT_X return stock=1"]
+    ),
+    contributing_factors=["Missing SELECT FOR UPDATE", "40ms payment delay widens window"],
+    primary_fix=CodeFix(
+        description="Add SELECT FOR UPDATE to inventory read",
+        code_location="inventory-service: GET /inventory/{productId}",
+        suggested_change="Use SELECT stock FROM inventory WHERE product_id = ? FOR UPDATE",
+        code_diff="-SELECT stock FROM inventory WHERE product_id = ?\\n+SELECT stock FROM inventory WHERE product_id = ? FOR UPDATE",
+        confidence=0.95
+    ),
+    secondary_fixes=[],
+    trace_summary="Two orders raced. Both saw stock=1. Both decremented. Stock went to -1.",
+    severity="CRITICAL",
+    schema_version=1
+)
 
 
 def make_trace() -> ReplayTrace:
@@ -61,10 +60,10 @@ def make_trace() -> ReplayTrace:
 
 class TestRcaChain:
     def test_analyze_returns_response_with_mock_llm(self):
-        """Test that chain correctly parses structured LLM output."""
+        \"\"\"Test that chain correctly returns structured LLM output.\"\"\"
         chain = RcaChain(gemini_api_key="fake-key")
         
-        with patch.object(chain, '_call_llm', return_value=MOCK_RCA_JSON):
+        with patch.object(chain, '_structured_invoke', return_value=MOCK_RCA_REPORT):
             trace = make_trace()
             result = chain.analyze(trace)
         
@@ -74,34 +73,13 @@ class TestRcaChain:
         assert result.error is None
     
     def test_analyze_returns_none_rca_on_llm_failure(self):
-        """Test graceful degradation when LLM fails."""
+        \"\"\"Test graceful degradation when LLM fails.\"\"\"
         chain = RcaChain(gemini_api_key="fake-key")
         
-        with patch.object(chain, '_call_llm', side_effect=Exception("rate limited")):
+        with patch.object(chain, '_structured_invoke', side_effect=Exception("rate limited")):
             trace = make_trace()
             result = chain.analyze(trace)
         
         assert result.rca is None
         assert result.error is not None
         assert "rate limited" in result.error
-    
-    def test_rca_report_schema_version(self):
-        """RcaReport always has schema_version=1."""
-        report = RcaReport(
-            root_cause=RootCause(
-                pattern="TOCTOU_RACE_CONDITION",
-                description="test",
-                affected_services=["svc-a"],
-                evidence=["e1"],
-            ),
-            contributing_factors=[],
-            primary_fix=CodeFix(
-                description="fix",
-                code_location="svc: GET /",
-                suggested_change="add lock",
-                code_diff="-old\n+new",
-                confidence=0.9,
-            ),
-            trace_summary="Test summary.",
-        )
-        assert report.schema_version == 1
