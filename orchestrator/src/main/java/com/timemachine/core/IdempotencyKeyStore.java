@@ -1,4 +1,4 @@
-package com.kairos.core;
+package com.timemachine.core;
 
 import java.util.concurrent.*;
 import java.util.function.Supplier;

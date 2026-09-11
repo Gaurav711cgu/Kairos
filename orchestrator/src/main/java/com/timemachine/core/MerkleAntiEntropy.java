@@ -1,4 +1,4 @@
-package com.kairos.core;
+package com.timemachine.core;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -25,19 +25,18 @@ public class MerkleAntiEntropy {
 
     public record MerkleNode(String hash, MerkleNode left, MerkleNode right) {}
 
-    private final MessageDigest digest;
-
     public MerkleAntiEntropy() {
-        try {
-            this.digest = MessageDigest.getInstance("SHA-256");
-        } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException("SHA-256 not available", e);
-        }
+        // No shared state initialization needed
     }
 
     private String sha256(String input) {
-        byte[] hashBytes = digest.digest(input.getBytes());
-        return HexFormat.of().formatHex(hashBytes);
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hashBytes = digest.digest(input.getBytes());
+            return HexFormat.of().formatHex(hashBytes);
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("SHA-256 not available", e);
+        }
     }
 
     /**

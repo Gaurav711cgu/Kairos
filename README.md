@@ -22,7 +22,7 @@
 
 <br/>
 
-[Architecture](#architecture-and-data-flow) &nbsp;·&nbsp; [Benchmarks](#recruiter-facing-performance-benchmarks) &nbsp;·&nbsp; [System Design Principles](#10-system-design-principles-implemented) &nbsp;·&nbsp; [Quickstart](#local-quickstart-in-60-seconds)
+[Architecture](#architecture-and-data-flow) &nbsp;·&nbsp; [Benchmarks](#performance-benchmarks) &nbsp;·&nbsp; [System Design Principles](#10-system-design-principles-implemented) &nbsp;·&nbsp; [Quickstart](#local-quickstart-in-60-seconds)
 
 </div>
 
@@ -45,7 +45,7 @@
 1. [Executive Summary](#executive-summary)
 2. [Architecture and Data Flow](#architecture-and-data-flow)
 3. [The Concurrency Bug: Reproducing a Real TOCTOU Race](#the-concurrency-bug-reproducing-a-real-toctou-race)
-4. [Recruiter-Facing Performance Benchmarks](#recruiter-facing-performance-benchmarks)
+4. [Performance Benchmarks](#performance-benchmarks)
 5. [10 System Design Principles Implemented](#10-system-design-principles-implemented)
 6. [Failure Modes and Mitigation Matrix](#failure-modes-and-mitigation-matrix)
 7. [Zero-Cost Cloud Deployment Architecture](#zero-cost-cloud-deployment-architecture)
@@ -142,7 +142,7 @@ Both HTTP requests return `200 OK`. There are no 5xx errors in logs, and Prometh
 
 ---
 
-## Recruiter-Facing Performance Benchmarks
+## Performance Benchmarks
 
 | Component | Target Metric | Measured Value | Production Industry Benchmark |
 |---|---|---|---|

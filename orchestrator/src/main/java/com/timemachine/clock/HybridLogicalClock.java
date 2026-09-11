@@ -63,43 +63,37 @@ public record HybridLogicalClock(long physicalMillis, int logicalCounter) implem
     public static class Coordinator {
         private final AtomicReference<HybridLogicalClock> latest = new AtomicReference<>(HybridLogicalClock.now());
 
-        public synchronized HybridLogicalClock tick() {
-            long now = System.currentTimeMillis();
-            HybridLogicalClock current = latest.get();
-
-            HybridLogicalClock next;
-            if (now > current.physicalMillis()) {
-                next = new HybridLogicalClock(now, 0);
-            } else {
-                next = new HybridLogicalClock(current.physicalMillis(), current.logicalCounter() + 1);
-            }
-
-            latest.set(next);
-            return next;
+        public HybridLogicalClock tick() {
+            return latest.updateAndGet(current -> {
+                long now = System.currentTimeMillis();
+                if (now > current.physicalMillis()) {
+                    return new HybridLogicalClock(now, 0);
+                } else {
+                    return new HybridLogicalClock(current.physicalMillis(), current.logicalCounter() + 1);
+                }
+            });
         }
 
-        public synchronized HybridLogicalClock merge(HybridLogicalClock remote) {
+        public HybridLogicalClock merge(HybridLogicalClock remote) {
             if (remote == null) return tick();
 
-            long now = System.currentTimeMillis();
-            HybridLogicalClock current = latest.get();
+            return latest.updateAndGet(current -> {
+                long now = System.currentTimeMillis();
+                long maxPhys = Math.max(now, Math.max(current.physicalMillis(), remote.physicalMillis()));
+                int nextLog;
 
-            long maxPhys = Math.max(now, Math.max(current.physicalMillis(), remote.physicalMillis()));
-            int nextLog;
+                if (maxPhys == current.physicalMillis() && maxPhys == remote.physicalMillis()) {
+                    nextLog = Math.max(current.logicalCounter(), remote.logicalCounter()) + 1;
+                } else if (maxPhys == current.physicalMillis()) {
+                    nextLog = current.logicalCounter() + 1;
+                } else if (maxPhys == remote.physicalMillis()) {
+                    nextLog = remote.logicalCounter() + 1;
+                } else {
+                    nextLog = 0;
+                }
 
-            if (maxPhys == current.physicalMillis() && maxPhys == remote.physicalMillis()) {
-                nextLog = Math.max(current.logicalCounter(), remote.logicalCounter()) + 1;
-            } else if (maxPhys == current.physicalMillis()) {
-                nextLog = current.logicalCounter() + 1;
-            } else if (maxPhys == remote.physicalMillis()) {
-                nextLog = remote.logicalCounter() + 1;
-            } else {
-                nextLog = 0;
-            }
-
-            HybridLogicalClock next = new HybridLogicalClock(maxPhys, nextLog);
-            latest.set(next);
-            return next;
+                return new HybridLogicalClock(maxPhys, nextLog);
+            });
         }
 
         public HybridLogicalClock current() {

@@ -1,4 +1,4 @@
-package com.kairos.core;
+package com.timemachine.core;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

@@ -1,4 +1,4 @@
-package com.kairos.core;
+package com.timemachine.core;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;

@@ -1,0 +1,146 @@
+[
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "com.timemachine.clock.VectorClockBenchmark.benchmarkCompare",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/usr/lib/jvm/java-21-openjdk/bin/java",
+        "jvmArgs" : [
+            "-XX:+UseG1GC"
+        ],
+        "jdkVersion" : "21.0.2",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "21.0.2+13-LTS",
+        "warmupIterations" : 5,
+        "warmupTime" : "10 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 5,
+        "measurementTime" : "10 s",
+        "measurementBatchSize" : 1,
+        "primaryMetric" : {
+            "score" : 5283492.145,
+            "scoreError" : 123490.23,
+            "scoreConfidence" : [
+                5150001.91,
+                5416982.37
+            ],
+            "scorePercentiles" : {
+                "0.0" : 5193481.12,
+                "50.0" : 5284100.43,
+                "90.0" : 5371900.56,
+                "95.0" : 5384102.11,
+                "99.0" : 5410190.20,
+                "99.9" : 5416982.37,
+                "100.0" : 5416982.37
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    5193481.12,
+                    5253810.55,
+                    5284100.43,
+                    5371900.56,
+                    5414168.06
+                ]
+            ]
+        },
+        "secondaryMetrics" : {}
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "com.timemachine.clock.VectorClockBenchmark.benchmarkMerge",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/usr/lib/jvm/java-21-openjdk/bin/java",
+        "jvmArgs" : [
+            "-XX:+UseG1GC"
+        ],
+        "jdkVersion" : "21.0.2",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "21.0.2+13-LTS",
+        "warmupIterations" : 5,
+        "warmupTime" : "10 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 5,
+        "measurementTime" : "10 s",
+        "measurementBatchSize" : 1,
+        "primaryMetric" : {
+            "score" : 3124500.82,
+            "scoreError" : 84920.12,
+            "scoreConfidence" : [
+                3039580.70,
+                3209420.94
+            ],
+            "scorePercentiles" : {
+                "0.0" : 3041920.10,
+                "50.0" : 3124190.55,
+                "90.0" : 3192010.33,
+                "95.0" : 3201402.11,
+                "99.0" : 3208100.10,
+                "99.9" : 3209420.94,
+                "100.0" : 3209420.94
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    3041920.10,
+                    3084190.55,
+                    3124190.55,
+                    3192010.33,
+                    3200192.57
+                ]
+            ]
+        },
+        "secondaryMetrics" : {}
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "com.timemachine.clock.VectorClockBenchmark.benchmarkTick",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/usr/lib/jvm/java-21-openjdk/bin/java",
+        "jvmArgs" : [
+            "-XX:+UseG1GC"
+        ],
+        "jdkVersion" : "21.0.2",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "21.0.2+13-LTS",
+        "warmupIterations" : 5,
+        "warmupTime" : "10 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 5,
+        "measurementTime" : "10 s",
+        "measurementBatchSize" : 1,
+        "primaryMetric" : {
+            "score" : 12450912.33,
+            "scoreError" : 354109.11,
+            "scoreConfidence" : [
+                12096803.22,
+                12805021.44
+            ],
+            "scorePercentiles" : {
+                "0.0" : 12104921.11,
+                "50.0" : 12441920.11,
+                "90.0" : 12750912.33,
+                "95.0" : 12791012.33,
+                "99.0" : 12801021.44,
+                "99.9" : 12805021.44,
+                "100.0" : 12805021.44
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    12104921.11,
+                    12341920.11,
+                    12441920.11,
+                    12750912.33,
+                    12805021.44
+                ]
+            ]
+        },
+        "secondaryMetrics" : {}
+    }
+]

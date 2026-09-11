@@ -48,7 +48,7 @@ func (r *CircularRingBuffer) GetRecentWindow(windowDuration time.Duration) []Raw
         idx := (r.head - 1 - i + r.capacity) % r.capacity
         snap := r.buffer[idx]
         if snap.CapturedAt.Before(cutoff) {
-            break
+            continue
         }
         result = append(result, snap)
     }
