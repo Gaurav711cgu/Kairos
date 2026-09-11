@@ -18,7 +18,8 @@ public class ReplaySessionRepository {
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
 
-    private final RowMapper<ReplaySession> sessionRowMapper = (rs, rowNum) -> {
+    private RowMapper<ReplaySession> sessionRowMapper() {
+        return (rs, rowNum) -> {
         try {
             UUID id = (UUID) rs.getObject("id");
             String sessionId = rs.getString("session_id");
@@ -61,7 +62,8 @@ public class ReplaySessionRepository {
         } catch (Exception e) {
             throw new RuntimeException("Failed to map ReplaySession", e);
         }
-    };
+        };
+    }
 
     public void createSession(String sessionId, List<String> services) {
         String sql = """
@@ -96,12 +98,12 @@ public class ReplaySessionRepository {
 
     public Optional<ReplaySession> findBySessionId(String sessionId) {
         String sql = "SELECT * FROM replay_sessions WHERE session_id = ?";
-        List<ReplaySession> list = jdbcTemplate.query(sql, sessionRowMapper, sessionId);
+        List<ReplaySession> list = jdbcTemplate.query(sql, sessionRowMapper(), sessionId);
         return list.isEmpty() ? Optional.empty() : Optional.of(list.get(0));
     }
 
     public List<ReplaySession> listAll() {
         String sql = "SELECT * FROM replay_sessions ORDER BY created_at DESC LIMIT 50";
-        return jdbcTemplate.query(sql, sessionRowMapper);
+        return jdbcTemplate.query(sql, sessionRowMapper());
     }
 }
