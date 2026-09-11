@@ -10,7 +10,7 @@ import { DbDiff } from '@/app/components/DbDiff';
 import { ReplayControls } from '@/app/components/ReplayControls';
 
 export default function ReplayDetailPage() {
-  const params = useParams<{ sessionId: string }>();
+  const params = useParams() as { sessionId: string };
   const router = useRouter();
   const [session, setSession] = useState<ReplaySession | null>(null);
   const [loading, setLoading] = useState(true);
@@ -155,7 +155,7 @@ export default function ReplayDetailPage() {
             <div className="card" style={{ textAlign: 'center', padding: 40 }}>
               <div className="spinner" style={{ margin: '0 auto 16px', width: 32, height: 32, borderWidth: 3 }} />
               <p style={{ color: 'var(--text-muted)' }}>Gemini 2.5 Flash is analyzing the trace...</p>
-              <p style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 8 }}>Typically < 2 seconds p50</p>
+              <p style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 8 }}>Typically &lt; 2 seconds p50</p>
             </div>
           ) : (
             <div className="card empty-state">
