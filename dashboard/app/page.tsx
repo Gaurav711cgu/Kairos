@@ -1,184 +1,151 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { ReplaySession } from '@/lib/types';
-import { listSessions, startReplay } from '@/lib/api';
-import { formatDistanceToNow } from 'date-fns';
-import clsx from 'clsx';
+import { useEffect, useRef } from 'react';
+import { animate, stagger, set } from 'animejs';
+import dynamic from 'next/dynamic';
+import AuditTimeline from './components/AuditTimeline';
+import AgentRcaPanel from './components/AgentRcaPanel';
+import { Cpu, TerminalSquare, Activity, Server } from 'lucide-react';
 
-function StatusBadge({ status }: { status: ReplaySession['status'] }) {
-  const isRunning = !['COMPLETE', 'FAILED', 'CREATED',
-    'FAILED_RESTORE_VALIDATION', 'FAILED_ORDERING_VIOLATION',
-    'FAILED_BRANCH_CREATION', 'FAILED_CAUSAL_CYCLE'].includes(status);
-  const isFailed = status.startsWith('FAILED');
-  const isComplete = status === 'COMPLETE';
-  
-  return (
-    <span className={clsx('badge',
-      isComplete && 'badge-complete',
-      isFailed && 'badge-failed',
-      isRunning && 'badge-running',
-      status === 'CREATED' && 'badge-created',
-    )}>
-      {isRunning && <span className="pulse">●</span>}
-      {status.replace(/_/g, ' ')}
-    </span>
-  );
-}
+// Dynamically import Three.js scene to avoid SSR issues
+const ThreeScene = dynamic(() => import('./components/ThreeScene'), { ssr: false });
 
-export default function HomePage() {
-  const router = useRouter();
-  const [sessions, setSessions] = useState<ReplaySession[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [starting, setStarting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+export default function Dashboard() {
+  const headerRef = useRef<HTMLDivElement>(null);
+  const leftColRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const load = async () => {
-      try {
-        const data = await listSessions();
-        setSessions(data);
-      } catch (e) {
-        setError('Could not connect to orchestrator at localhost:8090');
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
-    const interval = setInterval(load, 5000);
-    return () => clearInterval(interval);
+    if (headerRef.current) {
+      set(headerRef.current, { translateY: -60, opacity: 0 });
+      animate(headerRef.current, {
+        translateY: 0,
+        opacity: 1,
+        ease: 'spring(1, 80, 10, 0)',
+        duration: 1000,
+        delay: 100
+      });
+    }
+    if (leftColRef.current) {
+      const cards = leftColRef.current.querySelectorAll('.context-card');
+      set(cards, { translateX: -40, opacity: 0 });
+      animate(cards, {
+        translateX: 0,
+        opacity: 1,
+        ease: 'spring(1, 80, 10, 0)',
+        duration: 1000,
+        delay: stagger(150, { start: 300 })
+      });
+    }
   }, []);
 
-  const handleNewReplay = async () => {
-    setStarting(true);
-    try {
-      const result = await startReplay({
-        startTraceId: 'latest',
-        services: ['order-service', 'payment-service', 'inventory-service'],
-      });
-      router.push(`/replay/${result.sessionId}`);
-    } catch (e) {
-      setError('Failed to start replay: ' + String(e));
-    } finally {
-      setStarting(false);
-    }
-  };
-
-  const completedSessions = sessions.filter(s => s.status === 'COMPLETE').length;
-  const failedSessions = sessions.filter(s => s.status.startsWith('FAILED')).length;
-  const racingSessions = sessions.filter(s => s.racingConditionDetected).length;
-
   return (
-    <div>
-      <div className="section">
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
-          <div>
-            <h1>Replay Sessions</h1>
-            <p style={{ color: 'var(--text-muted)', marginTop: 4, fontSize: 14 }}>
-              Causal state capture and deterministic replay for distributed microservices
-            </p>
-          </div>
-          <button
-            className="btn btn-primary"
-            onClick={handleNewReplay}
-            disabled={starting}
-          >
-            {starting ? <><span className="spinner" /> Starting...</> : 'New Replay'}
-          </button>
-        </div>
+    <div className="relative min-h-screen flex flex-col p-5 overflow-hidden">
+      {/* 3D Background — vector clock orb network */}
+      <ThreeScene />
 
-        {/* Stats */}
-        <div className="grid-3" style={{ marginBottom: 24 }}>
-          <div className="card stat-card">
-            <div className="stat-label">Total Sessions</div>
-            <div className="stat-value">{sessions.length}</div>
-            <div className="stat-sub">{completedSessions} completed</div>
-          </div>
-          <div className="card stat-card">
-            <div className="stat-label">Race Conditions Detected</div>
-            <div className="stat-value" style={{ color: 'var(--amber)' }}>{racingSessions}</div>
-            <div className="stat-sub">via vector clocks</div>
-          </div>
-          <div className="card stat-card">
-            <div className="stat-label">Failed Sessions</div>
-            <div className="stat-value" style={{ color: failedSessions > 0 ? 'var(--red)' : 'var(--green)' }}>{failedSessions}</div>
-            <div className="stat-sub">saga compensated</div>
-          </div>
-        </div>
+      {/* Foreground */}
+      <div className="relative z-10 flex flex-col h-full max-w-[1700px] mx-auto w-full flex-1 gap-5">
 
-        {error && (
-          <div className="card" style={{ borderColor: 'rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.05)', marginBottom: 16 }}>
-            <p style={{ color: 'var(--red)', fontSize: 13 }}>Error: {error}</p>
-          </div>
-        )}
-
-        {loading ? (
-          <div className="card" style={{ textAlign: 'center', padding: 40 }}>
-            <div className="spinner" style={{ margin: '0 auto 12px' }} />
-            <p style={{ color: 'var(--text-muted)' }}>Connecting to orchestrator...</p>
-          </div>
-        ) : sessions.length === 0 ? (
-          <div className="card empty-state">
-            <div className="empty-state-icon">[STM]</div>
-            <div className="empty-state-title">No Replay Sessions Yet</div>
-            <div className="empty-state-desc">
-              Run <code style={{ fontFamily: 'var(--font-mono)', background: 'var(--surface-2)', padding: '2px 6px', borderRadius: 3 }}>./trigger-race.sh</code> to create a race condition, then click New Replay.
+        {/* ── Header ── */}
+        <header ref={headerRef}
+          className="flex justify-between items-center px-5 py-3 rounded-2xl border border-agentic-border"
+          style={{ background: 'rgba(10,10,12,0.7)', backdropFilter: 'blur(16px)' }}>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-agentic-cyan border"
+              style={{ background: 'rgba(0,240,255,0.08)', borderColor: 'rgba(0,240,255,0.2)', boxShadow: '0 0 12px rgba(0,240,255,0.15)' }}>
+              <Cpu className="w-4.5 h-4.5" />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold tracking-widest text-agentic-text">
+                KAIROS<span className="text-agentic-cyan">.AUDITOR</span>
+              </h1>
+              <p className="text-[10px] text-agentic-dim uppercase tracking-[0.25em] font-mono leading-none">
+                Agentic Actions &amp; Vector Clock Replay
+              </p>
             </div>
           </div>
-        ) : (
-          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-            <table className="session-table">
-              <thead>
-                <tr>
-                  <th>Session ID</th>
-                  <th>Status</th>
-                  <th>Race Detected</th>
-                  <th>Root Cause</th>
-                  <th>Services</th>
-                  <th>Started</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sessions.map(s => (
-                  <tr key={s.sessionId} onClick={() => router.push(`/replay/${s.sessionId}`)}>
-                    <td>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--accent)' }}>
-                        {s.sessionId.substring(0, 12)}...
-                      </span>
-                    </td>
-                    <td><StatusBadge status={s.status} /></td>
-                    <td>
-                      {s.racingConditionDetected
-                        ? <span className="badge badge-anomaly">Yes</span>
-                        : <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>
-                      }
-                    </td>
-                    <td>
-                      {s.rcaReport?.rootCause.pattern
-                        ? <span className="badge badge-toctou">{s.rcaReport.rootCause.pattern.replace(/_/g, ' ')}</span>
-                        : <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>
-                      }
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                        {s.services?.slice(0, 2).map(svc => (
-                          <span key={svc} className="service-chip">{svc.replace('-service', '')}</span>
-                        ))}
-                        {(s.services?.length || 0) > 2 && (
-                          <span className="service-chip">+{s.services.length - 2}</span>
-                        )}
-                      </div>
-                    </td>
-                    <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>
-                      {formatDistanceToNow(new Date(s.createdAt), { addSuffix: true })}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+
+          <div className="flex items-center gap-4">
+            <div className="hidden sm:flex items-center gap-3 text-xs font-mono text-agentic-dim">
+              <span className="flex items-center gap-1.5">
+                <Activity className="w-3.5 h-3.5 text-agentic-cyan" /> 5 events
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Server className="w-3.5 h-3.5 text-agentic-purple" /> 3 services
+              </span>
+            </div>
+            <div className="flex items-center gap-2 bg-black/50 px-3 py-1.5 rounded-lg border border-agentic-border">
+              <span className="w-2 h-2 rounded-full bg-agentic-cyan"
+                style={{ boxShadow: '0 0 8px rgba(0,240,255,0.9)', animation: 'pulse 2s cubic-bezier(0.4,0,0.6,1) infinite' }} />
+              <span className="text-xs font-mono text-agentic-dim">SYS.ONLINE</span>
+            </div>
           </div>
-        )}
+        </header>
+
+        {/* ── Main Grid ── */}
+        <div className="flex-1 flex gap-5 min-h-0" style={{ height: 'calc(100vh - 100px)' }}>
+
+          {/* Left: Context & Logs */}
+          <div ref={leftColRef} className="w-64 shrink-0 flex flex-col gap-4">
+
+            {/* Trace context card */}
+            <div className="context-card glass-panel p-4">
+              <div className="flex items-center gap-2 mb-4 text-agentic-dim">
+                <TerminalSquare className="w-3.5 h-3.5" />
+                <h3 className="text-xs font-mono uppercase tracking-[0.15em]">Trace Context</h3>
+              </div>
+              <div className="space-y-3 font-mono text-xs">
+                {[
+                  { label: 'Trace ID', value: 'tr_8f92a1', color: 'text-agentic-cyan' },
+                  { label: 'Session', value: 'ses_001', color: 'text-agentic-text' },
+                  { label: 'Env', value: 'production', color: 'text-agentic-text' },
+                  { label: 'Racing', value: 'detected ⚠', color: 'text-red-400' },
+                  { label: 'Latency P99', value: '120ms', color: 'text-agentic-text' },
+                  { label: 'Anomaly Score', value: '-0.42', color: 'text-agentic-purple' },
+                ].map(({ label, value, color }) => (
+                  <div key={label} className="flex justify-between items-baseline gap-2">
+                    <span className="text-agentic-dim shrink-0">{label}</span>
+                    <span className={`${color} truncate text-right`}>{value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Orchestrator log card */}
+            <div className="context-card glass-panel p-4 flex-1 overflow-hidden"
+              style={{ background: 'linear-gradient(to bottom, rgba(15,15,17,0.8), rgba(176,38,255,0.03))' }}>
+              <h3 className="text-xs font-mono uppercase tracking-[0.15em] text-agentic-dim mb-4">Orchestrator Log</h3>
+              <div className="text-[11px] font-mono space-y-2 overflow-y-auto" style={{ maxHeight: '300px' }}>
+                {[
+                  { t: '00:00:00', msg: '> Session ses_001 initialized', c: 'text-agentic-dim' },
+                  { t: '00:00:01', msg: '> Replaying 5 causal events...', c: 'text-agentic-dim' },
+                  { t: '00:00:01', msg: '> Vector clocks converging...', c: 'text-agentic-dim' },
+                  { t: '00:00:02', msg: '> DIVERGENCE at causal pos 0', c: 'text-red-400' },
+                  { t: '00:00:02', msg: '> DB state: stock went to -1', c: 'text-red-400' },
+                  { t: '00:00:03', msg: '> Triggering LLM Analyzer...', c: 'text-agentic-cyan' },
+                  { t: '00:00:05', msg: '> RCA complete. Confidence 95%', c: 'text-green-400' },
+                ].map(({ t, msg, c }, i) => (
+                  <div key={i} className="flex gap-2">
+                    <span className="text-agentic-border shrink-0">{t}</span>
+                    <span className={c}>{msg}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+          </div>
+
+          {/* Middle: Causal Audit Timeline */}
+          <div className="flex-1 min-w-0">
+            <AuditTimeline />
+          </div>
+
+          {/* Right: AI Agent RCA */}
+          <div className="w-72 shrink-0">
+            <AgentRcaPanel />
+          </div>
+
+        </div>
       </div>
     </div>
   );

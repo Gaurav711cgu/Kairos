@@ -1,35 +1,27 @@
-import type { Metadata } from 'next';
-import './globals.css';
+import type { Metadata } from "next";
+import "./globals.css";
 
 export const metadata: Metadata = {
-  title: 'Distributed State Time Machine',
-  description: 'Causal state capture and deterministic replay for distributed microservices',
-  keywords: ['distributed systems', 'debugging', 'vector clocks', 'replay', 'microservices'],
+  title: "Kairos Auditor",
+  description: "Agentic Actions & Vector Clock Replay Auditor",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
   return (
-    <html lang="en">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
-          rel="stylesheet"
-        />
-      </head>
-      <body>
-        <nav className="nav">
-          <div className="nav-brand">
-            <span className="nav-icon">[STM]</span>
-            <span className="nav-title">State Time Machine</span>
-          </div>
-          <div className="nav-links">
-            <a href="/" className="nav-link">Incidents</a>
-            <a href="https://github.com" target="_blank" rel="noopener" className="nav-link">GitHub</a>
-          </div>
-        </nav>
-        <main className="main">{children}</main>
+    <html lang="en" className="dark">
+      <body className="min-h-screen bg-agentic-dark text-agentic-text flex flex-col">
+        {/* Subtle global ambient glow */}
+        <div className="fixed inset-0 z-0 pointer-events-none opacity-20">
+           <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-agentic-cyan/30 blur-[120px]" />
+           <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-agentic-purple/30 blur-[120px]" />
+        </div>
+        <main className="relative z-10 flex-1 flex flex-col">
+          {children}
+        </main>
       </body>
     </html>
   );
