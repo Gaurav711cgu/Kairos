@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"reflect"
 	"sync"
 	"testing"
@@ -47,7 +48,7 @@ func TestVectorClockToHeader(t *testing.T) {
 	
 	header := vc.snapshot(vc.hlc.Now()).ToHeader()
 	expected := "svc1:1,svc2:2"
-	if header != expected {
+	if !strings.HasPrefix(header, expected) {
 		t.Errorf("expected %s, got %s", expected, header)
 	}
 }

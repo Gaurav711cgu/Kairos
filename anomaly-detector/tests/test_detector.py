@@ -13,7 +13,7 @@ def detector():
 
 class TestAnomalyDetector:
     def test_normal_traffic_not_anomaly(self, detector):
-        \"\"\"Normal traffic should not trigger anomaly.\"\"\"
+        """Normal traffic should not trigger anomaly."""
         normal = MetricsWindow(
             latency_p99_ms=150.0,
             error_rate_percent=1.0,
@@ -29,7 +29,7 @@ class TestAnomalyDetector:
         assert hasattr(result, 'contributing_features')
     
     def test_race_condition_metrics_trigger_anomaly(self, detector):
-        \"\"\"Ghost order race condition metrics should be detected as anomaly.\"\"\"
+        """Ghost order race condition metrics should be detected as anomaly."""
         race_metrics = MetricsWindow(
             latency_p99_ms=450.0,
             error_rate_percent=0.0,
@@ -42,7 +42,7 @@ class TestAnomalyDetector:
         assert result.is_anomaly or result.confidence > 0.0
     
     def test_inference_latency_benchmark(self, detector):
-        \"\"\"Benchmark single-sample inference time.\"\"\"
+        """Benchmark single-sample inference time."""
         metrics = MetricsWindow(
             latency_p99_ms=150.0,
             error_rate_percent=1.0,

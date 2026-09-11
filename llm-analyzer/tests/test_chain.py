@@ -60,7 +60,7 @@ def make_trace() -> ReplayTrace:
 
 class TestRcaChain:
     def test_analyze_returns_response_with_mock_llm(self):
-        \"\"\"Test that chain correctly returns structured LLM output.\"\"\"
+        """Test that chain correctly returns structured LLM output."""
         chain = RcaChain(gemini_api_key="fake-key")
         
         with patch.object(chain, '_structured_invoke', return_value=MOCK_RCA_REPORT):
@@ -73,7 +73,7 @@ class TestRcaChain:
         assert result.error is None
     
     def test_analyze_returns_none_rca_on_llm_failure(self):
-        \"\"\"Test graceful degradation when LLM fails.\"\"\"
+        """Test graceful degradation when LLM fails."""
         chain = RcaChain(gemini_api_key="fake-key")
         
         with patch.object(chain, '_structured_invoke', side_effect=Exception("rate limited")):
