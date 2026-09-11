@@ -36,35 +36,24 @@ class RcaChain:
             log.warning("no_gemini_api_key_set")
         
         if ChatGoogleGenerativeAI is not None:
-            self.model = ChatGoogleGenerativeAI(
+            base_model = ChatGoogleGenerativeAI(
                 model="gemini-2.5-flash",  # Fast, structured output
                 google_api_key=api_key,
                 temperature=0.1,  # Low temperature for structured output
             )
+            self.model = base_model.with_structured_output(RcaReport)
         else:
             self.model = None
-        
-        if PydanticOutputParser is not None:
-            self.parser = PydanticOutputParser(pydantic_object=RcaReport)
-            self.format_instructions = self.parser.get_format_instructions()
-        else:
-            self.parser = None
-            self.format_instructions = "{}"
     
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=4, max=60),
     )
-    def _call_llm(self, prompt_text: str) -> str:
+    def _structured_invoke(self, messages) -> RcaReport:
         """Call Gemini with retry on rate limit (429) errors."""
-        if self.model is None or SystemMessage is None:
+        if self.model is None:
             raise RuntimeError("Gemini model client not installed")
-        messages = [
-            SystemMessage(content=SYSTEM_PROMPT),
-            HumanMessage(content=prompt_text),
-        ]
-        response = self.model.invoke(messages)
-        return response.content
+        return self.model.invoke(messages)
     
     def analyze(self, trace: ReplayTrace, context: str = "") -> AnalysisResponse:
         """Run RCA analysis. Returns AnalysisResponse with rca=None on LLM failure.
@@ -74,6 +63,21 @@ class RcaChain:
         """
         start_ms = time.time() * 1000
         
+        # Context Pruning / Token Budgeting
+        MAX_EVENTS = 50
+        raw_events = trace.events
+        if len(raw_events) > MAX_EVENTS:
+            log.warning("pruning_events", original=len(raw_events), max=MAX_EVENTS)
+            anomalies = [e for e in raw_events if not e.status_match or e.replay_status >= 400]
+            if len(anomalies) >= MAX_EVENTS:
+                raw_events = anomalies[:MAX_EVENTS]
+            else:
+                normal_allowance = MAX_EVENTS - len(anomalies)
+                head = raw_events[:normal_allowance // 2]
+                tail = raw_events[-(normal_allowance // 2):]
+                # Merge and sort by causal position
+                raw_events = sorted(list(set(anomalies + head + tail)), key=lambda x: x.causal_position)
+                
         events_list = [
             {
                 'causal_position': e.causal_position,
@@ -85,7 +89,7 @@ class RcaChain:
                 'captured_latency_ms': e.captured_latency_ms,
                 'status_match': e.status_match,
             }
-            for e in trace.events
+            for e in raw_events
         ]
         
         prompt = ANALYSIS_TEMPLATE.format(
@@ -99,22 +103,17 @@ class RcaChain:
             anomaly_score=trace.anomaly_score,
             context=context or "None provided",
         )
-        prompt += f"\n\nFormat instructions:\n{self.format_instructions}"
+        
         
         try:
-            raw = self._call_llm(prompt)
+            if self.model is None or SystemMessage is None:
+                raise RuntimeError("Gemini model client not installed")
             
-            # Try to extract JSON if wrapped in markdown code block
-            if '```json' in raw:
-                raw = raw.split('```json')[1].split('```')[0].strip()
-            elif '```' in raw:
-                raw = raw.split('```')[1].split('```')[0].strip()
-            
-            if self.parser is not None:
-                rca = self.parser.parse(raw)
-            else:
-                data = json.loads(raw)
-                rca = RcaReport.model_validate(data)
+            messages = [
+                SystemMessage(content=SYSTEM_PROMPT),
+                HumanMessage(content=prompt),
+            ]
+            rca = self._structured_invoke(messages)
             
             latency_ms = time.time() * 1000 - start_ms
             log.info("rca_complete: session=%s pattern=%s latency=%.0fms confidence=%.2f",

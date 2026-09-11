@@ -157,7 +157,12 @@ class AnomalyDetector:
         score = self.model.score_samples(features)[0]  # More negative = more anomalous
         inference_us = (time.perf_counter() - t0) * 1e6
         
-        confidence = min(1.0, max(0.0, -score / 0.5))
+        # Logistic Sigmoid Calibration (Platt Scaling approximation)
+        # Isolation Forest scores typically range [-0.5, 0] for anomalies
+        k = 10.0
+        threshold = 0.1 # We negate the score, so positive means anomaly
+        confidence = float(1.0 / (1.0 + np.exp(-k * (-score - threshold))))
+        
         is_anomaly = bool(prediction == -1)
         
         result = AnomalyResult(

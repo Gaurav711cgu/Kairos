@@ -21,7 +21,7 @@ services:
     environment:
       POSTGRES_DB: demo
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./seed.sql:/docker-entrypoint-initdb.d/seed.sql:ro
@@ -81,7 +81,7 @@ services:
       PORT: "8082"
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/demo
       SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: postgres
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     networks:
       - timemachine
     depends_on:
@@ -133,8 +133,11 @@ services:
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/demo
       SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: postgres
-      REPLAY_MODE: TESTCONTAINERS
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      REPLAY_MODE: ${REPLAY_MODE:-TESTCONTAINERS}
+      NEON_API_KEY: ${NEON_API_KEY:-}
+      NEON_PROJECT_ID: ${NEON_PROJECT_ID:-}
+      NEON_DATABASE_URL: ${NEON_DATABASE_URL:-}
       ANOMALY_DETECTOR_URL: http://anomaly-detector:8091
       LLM_ANALYZER_URL: http://llm-analyzer:8092
       SUPABASE_URL: ${SUPABASE_URL:-}
@@ -228,7 +231,7 @@ services:
   grafana:
     image: grafana/grafana:10.2.0
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
       GF_USERS_ALLOW_SIGN_UP: "false"
     volumes:
       - grafana_data:/var/lib/grafana

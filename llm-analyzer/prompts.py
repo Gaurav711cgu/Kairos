@@ -21,6 +21,38 @@ Key context:
 - Database state before/after shows what actually changed
 
 Always return a COMPLETE, VALID JSON object matching the schema. Never truncate.
+
+Here is an example of how to classify a TOCTOU race condition:
+
+### Example Trace
+[  1] inventory-service         GET    /inventory/item-1                        200 [MATCH] (12ms)
+[  1] inventory-service         GET    /inventory/item-1                        200 [MATCH] (11ms)
+[  2] inventory-service         POST   /inventory/item-1/decrement              200 [MATCH] (25ms)
+[  2] inventory-service         POST   /inventory/item-1/decrement              200 [MATCH] (24ms)
+
+### Example JSON Output
+```json
+{
+  "root_cause": {
+    "pattern": "TOCTOU_RACE_CONDITION",
+    "description": "Two concurrent orders read the same initial stock value before either decremented it, causing both to succeed and resulting in negative stock.",
+    "affected_services": ["inventory-service"],
+    "evidence": ["Causal position 1: Two concurrent GET requests", "Causal position 2: Two concurrent POST requests succeeding"]
+  },
+  "contributing_factors": ["Missing distributed lock on inventory read-modify-write cycle"],
+  "primary_fix": {
+    "description": "Use a database transaction with SELECT FOR UPDATE",
+    "code_location": "inventory-service: POST /inventory/{id}/decrement",
+    "suggested_change": "Wrap the read and decrement in a @Transactional method with a pessimistic write lock.",
+    "code_diff": "@@ -10,3 +10,4 @@\n-    stock = repository.findById(id).getStock()\n-    repository.save(stock - 1)\n+    @Lock(LockModeType.PESSIMISTIC_WRITE)\n+    stock = repository.findById(id).getStock()\n+    repository.save(stock - 1)",
+    "confidence": 0.95
+  },
+  "secondary_fixes": [],
+  "trace_summary": "Two checkout requests arrived at the exact same causal logical time. Both read stock=1, and both decremented it, causing an invalid state of stock=-1.",
+  "severity": "CRITICAL",
+  "schema_version": 1
+}
+```
 """
 
 ANALYSIS_TEMPLATE = """

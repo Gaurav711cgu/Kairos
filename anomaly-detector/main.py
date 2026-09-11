@@ -52,7 +52,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(","),
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -131,21 +131,35 @@ async def health():
 async def metrics():
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
+from fastapi import Depends
+from fastapi.security import APIKeyHeader
+
+API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+def verify_api_key(api_key: str = Depends(API_KEY_HEADER)):
+    expected = os.getenv("KAIROS_API_KEY", "dev-secret-key")
+    if api_key != expected:
+        raise HTTPException(status_code=403, detail="Invalid API Key")
+
 @app.post("/retrain")
-async def retrain():
-    """Trigger model retraining (called by scheduled job)."""
+async def retrain(metrics_history: list[MetricsRequest], _ = Depends(verify_api_key)):
+    """Trigger model retraining with real traffic data."""
     if detector is None:
         raise HTTPException(503, "Detector not initialized")
-    rng = np.random.default_rng()
-    synthetic = np.column_stack([
-        rng.uniform(80, 200, 2000),
-        rng.uniform(0, 2, 2000),
-        rng.uniform(5, 50, 2000),
-        rng.uniform(1.5, 3.0, 2000),
-        rng.integers(1, 3, 2000),
+    
+    if len(metrics_history) < 100:
+        raise HTTPException(400, "Need at least 100 samples to retrain")
+        
+    data = np.column_stack([
+        [m.latency_p99_ms for m in metrics_history],
+        [m.error_rate_percent for m in metrics_history],
+        [m.requests_per_second for m in metrics_history],
+        [m.latency_p99_ms / max(m.latency_p50_ms, 1.0) for m in metrics_history],
+        [m.concurrent_requests for m in metrics_history],
     ])
-    detector.retrain(synthetic)
-    return {"status": "retrained", "samples": 2000}
+    
+    detector.retrain(data)
+    return {"status": "retrained", "samples": len(metrics_history)}
 
 if __name__ == "__main__":
     import uvicorn
