@@ -2,7 +2,7 @@ package main
 
 import (
     "net/http"
-    "sync/atomic"
+    
 
     "github.com/prometheus/client_golang/prometheus"
     "github.com/prometheus/client_golang/prometheus/promhttp"

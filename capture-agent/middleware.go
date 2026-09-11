@@ -129,7 +129,7 @@ func (a *Agent) MetricsHandler() http.Handler {
 }
 
 func (a *Agent) RingBufferHandler(w http.ResponseWriter, r *http.Request) {
-	snaps := a.ringBuffer.GetRecentWindow()
+	snaps := a.ringBuffer.GetRecentWindow(5 * time.Minute)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(snaps)
 }
