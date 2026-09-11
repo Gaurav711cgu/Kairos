@@ -3,6 +3,9 @@ replay:
   mode: PRIMARY_RESET
 
 spring:
+  sql:
+    init:
+      mode: always
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:tc:postgresql:15-alpine:///demo}
     username: ${SPRING_DATASOURCE_USERNAME:test}
