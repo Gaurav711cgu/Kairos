@@ -16,6 +16,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           java-version: '21'
+          distribution: 'temurin'
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v3
       - name: Run All Orchestrator Test Suites
@@ -35,6 +36,7 @@ jobs:
       - name: Run Go Race Detector Tests
         run: |
           cd capture-agent
+          go mod tidy
           go test -race -v ./...
 
   test-python-services:
