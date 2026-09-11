@@ -1,5 +1,5 @@
 """Pydantic models for structured LLM output and API contracts."""
-from typing import Literal, Optional
+from typing import Literal, Optional, List, Dict, Any
 from pydantic import BaseModel, Field
 
 
@@ -15,8 +15,8 @@ class RootCause(BaseModel):
         "OTHER"
     ]
     description: str = Field(description="Clear explanation of what went wrong")
-    affected_services: list[str] = Field(description="Service IDs involved in the root cause")
-    evidence: list[str] = Field(description="Specific events from trace that prove this")
+    affected_services: List[str] = Field(description="Service IDs involved in the root cause")
+    evidence: List[str] = Field(description="Specific events from trace that prove this")
 
 
 class CodeFix(BaseModel):
@@ -30,9 +30,9 @@ class CodeFix(BaseModel):
 class RcaReport(BaseModel):
     """Root Cause Analysis report — structured output from Gemini."""
     root_cause: RootCause = Field(description="The primary root cause identified in the trace")
-    contributing_factors: list[str] = Field(description="Secondary factors that made the bug worse")
+    contributing_factors: List[str] = Field(description="Secondary factors that made the bug worse")
     primary_fix: CodeFix = Field(description="The primary fix for the root cause")
-    secondary_fixes: list[CodeFix] = Field(default_factory=list, max_length=3)
+    secondary_fixes: List[CodeFix] = Field(default_factory=list, max_length=3)
     trace_summary: str = Field(description="2-3 sentence narrative of what the trace shows")
     severity: Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"] = Field(default="HIGH", description="Severity of the issue")
     schema_version: int = Field(default=1, description="Schema version")
@@ -55,12 +55,12 @@ class ReplayEvent(BaseModel):
 class ReplayTrace(BaseModel):
     """Full replay trace sent to LLM for analysis."""
     session_id: str
-    services: list[str]
-    events: list[ReplayEvent]
-    db_state_before: dict
-    db_state_after: dict
+    services: List[str]
+    events: List[ReplayEvent]
+    db_state_before: Dict[str, Any]
+    db_state_after: Dict[str, Any]
     racing_condition_detected: bool
-    racing_snapshot_ids: Optional[list[str]] = None
+    racing_snapshot_ids: Optional[List[str]] = None
     anomaly_score: Optional[float] = None
 
 

@@ -41,7 +41,7 @@ class RcaChain:
                 google_api_key=api_key,
                 temperature=0.1,  # Low temperature for structured output
             )
-            self.model = base_model.with_structured_output(RcaReport)
+            self.model = base_model.with_structured_output(RcaReport, method="json_mode")
         else:
             self.model = None
     
