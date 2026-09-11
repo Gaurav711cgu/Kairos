@@ -26,7 +26,7 @@ class TestAnomalyDetector:
         assert isinstance(result.is_anomaly, bool)
         assert 0.0 <= result.confidence <= 1.0
         assert result.inference_time_us > 0
-        assert hasattr(result, 'contributing_features')
+        assert hasattr(result, 'features')
     
     def test_race_condition_metrics_trigger_anomaly(self, detector):
         """Ghost order race condition metrics should be detected as anomaly."""
@@ -62,5 +62,5 @@ class TestAnomalyDetector:
         
         p99 = np.percentile(latencies, 99)
         p50 = np.percentile(latencies, 50)
-        assert p99 < 50.0, f"Inference latency {p99:.1f}ms should be fast"
+        assert p99 < 50000.0, f"Inference latency {p99/1000:.1f}ms should be fast"
 
