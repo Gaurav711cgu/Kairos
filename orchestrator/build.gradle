@@ -42,7 +42,7 @@ dependencies {
     implementation 'com.fasterxml.jackson.core:jackson-databind'
     
     // WireMock for mock layer injection in replay
-    implementation 'com.github.tomakehurst:wiremock-standalone:3.3.1'
+    implementation 'org.wiremock:wiremock-standalone:3.3.1'
     
     // Testcontainers for local replay isolation
     implementation 'org.testcontainers:postgresql:1.19.7'
