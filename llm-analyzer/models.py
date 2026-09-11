@@ -29,13 +29,13 @@ class CodeFix(BaseModel):
 
 class RcaReport(BaseModel):
     """Root Cause Analysis report — structured output from Gemini."""
-    root_cause: RootCause
+    root_cause: RootCause = Field(description="The primary root cause identified in the trace")
     contributing_factors: list[str] = Field(description="Secondary factors that made the bug worse")
-    primary_fix: CodeFix
+    primary_fix: CodeFix = Field(description="The primary fix for the root cause")
     secondary_fixes: list[CodeFix] = Field(default_factory=list, max_length=3)
     trace_summary: str = Field(description="2-3 sentence narrative of what the trace shows")
-    severity: Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"] = "HIGH"
-    schema_version: int = 1
+    severity: Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"] = Field(default="HIGH", description="Severity of the issue")
+    schema_version: int = Field(default=1, description="Schema version")
 
 
 class ReplayEvent(BaseModel):

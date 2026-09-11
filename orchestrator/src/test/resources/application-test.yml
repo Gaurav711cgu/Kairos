@@ -1,12 +1,13 @@
-# Test profile: use primary DB / in-memory or fallback, no Neon branch, no Testcontainers
+# Test profile: use testcontainers
 replay:
   mode: PRIMARY_RESET
 
 spring:
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/demo}
-    username: ${SPRING_DATASOURCE_USERNAME:postgres}
-    password: ${SPRING_DATASOURCE_PASSWORD:postgres}
+    url: ${SPRING_DATASOURCE_URL:jdbc:tc:postgresql:15-alpine:///demo}
+    username: ${SPRING_DATASOURCE_USERNAME:test}
+    password: ${SPRING_DATASOURCE_PASSWORD:test}
+    driver-class-name: org.testcontainers.jdbc.ContainerDatabaseDriver
 
 llmAnalyzer:
   url: http://localhost:8092
